@@ -264,3 +264,210 @@ select.form-control { cursor: pointer; }
 .badge-brand_search { background: var(--info-bg); color: var(--primary); }
 .badge-candidate_verified { background: var(--success-bg); color: #1e7e34; }
 .badge-candidate_dedup_skipped { background: #f1f3f4; color: var(--text-secondary); }
+
+/* ══════════════════════════════════════════════════════════
+   GOOGLE BUSINESS PROFILE CONNECTION (RUN_03)
+   ══════════════════════════════════════════════════════════ */
+
+/* Mock banner — striking visual cue that this is NOT production */
+.mock-banner {
+    background: repeating-linear-gradient(45deg, #fff3cd, #fff3cd 10px, #fff8e1 10px, #fff8e1 20px);
+    border: 2px dashed #e6a700;
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.mock-banner-icon { font-size: 32px; }
+.mock-banner-text { flex: 1; }
+.mock-banner-text h3 { font-size: 16px; color: #8a6d00; margin-bottom: 4px; }
+.mock-banner-text p { font-size: 13px; color: #8a6d00; margin: 0; }
+.mock-badge {
+    display: inline-block;
+    background: #e6a700;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Status badges for Google connection */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.status-connected { background: var(--success-bg); color: #1e7e34; }
+.status-mock_connected { background: #fff3cd; color: #8a6d00; }
+.status-disconnected { background: #f1f3f4; color: var(--text-secondary); }
+.status-token_expired { background: var(--warning-bg); color: #8a6d00; }
+.status-token_revoked { background: var(--danger-bg); color: var(--danger); }
+.status-permission_denied { background: var(--danger-bg); color: var(--danger); }
+.status-api_access_pending { background: #e8f0fe; color: var(--primary); }
+.status-not_connected { background: #f1f3f4; color: var(--text-secondary); }
+.status-oauth_in_progress { background: #e8f0fe; color: var(--primary); }
+.status-api_access_pending { background: #e8f0fe; color: var(--primary); }
+.status-partial_access { background: var(--warning-bg); color: #8a6d00; }
+
+/* Mock status icon */
+.mock-indicator { color: #e6a700; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+
+/* Google connection card */
+.connection-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+}
+.connection-card h3 { font-size: 16px; margin-bottom: 16px; }
+.connection-detail { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.connection-detail:last-child { border-bottom: none; }
+.connection-detail-label { font-weight: 600; font-size: 13px; min-width: 140px; color: var(--text-secondary); }
+.connection-detail-value { font-size: 13px; word-break: break-all; }
+
+/* Google OAuth button */
+.btn-google {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    color: #333;
+    border: 1px solid #dadce0;
+    padding: 10px 20px;
+    font-weight: 500;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    transition: box-shadow 0.15s;
+    text-decoration: none;
+}
+.btn-google:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.15); background: #f8f9fa; }
+.btn-google svg { width: 20px; height: 20px; }
+
+.btn-disconnect {
+    background: white;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+.btn-disconnect:hover { background: var(--danger-bg); }
+
+/* Health check table */
+.health-list { list-style: none; padding: 0; }
+.health-item {
+    display: flex;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    align-items: center;
+}
+.health-item:last-child { border-bottom: none; }
+.health-label { font-weight: 500; color: var(--text-secondary); min-width: 180px; }
+.health-value { font-weight: 600; }
+.health-pass { color: var(--success); }
+.health-fail { color: var(--danger); }
+.health-neutral { color: var(--text-secondary); }
+
+/* Location items */
+.location-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+}
+.location-item:last-child { border-bottom: none; }
+.location-icon { font-size: 24px; flex: 0 0 auto; }
+.location-info { flex: 1; }
+.location-info h4 { font-size: 15px; margin-bottom: 4px; }
+.location-info p { font-size: 13px; color: var(--text-secondary); margin: 2px 0; }
+.location-actions { flex: 0 0 auto; display: flex; gap: 8px; align-items: center; }
+
+/* Owner-blocked visual */
+.owner-blocked {
+    opacity: 0.6;
+    border-left: 4px solid var(--warning) !important;
+}
+.owner-blocked h4,
+.owner-blocked p {
+    text-decoration: line-through;
+    color: var(--text-secondary) !important;
+}
+.owner-blocked-badge {
+    display: inline-block;
+    background: var(--warning-bg);
+    color: #8a6d00;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Match status badges */
+.match-matched {}
+.match-matched-badge { background: var(--success-bg); color: #1e7e34; }
+.match-unmatched-badge { background: #f1f3f4; color: var(--text-secondary); }
+.match-ambiguous-badge { background: var(--warning-bg); color: #8a6d00; }
+
+/* Reply disabled visual */
+.reply-disabled {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+.reply-disabled::after {
+    content: ' ⛔';
+}
+
+/* Account card in picker */
+.account-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    background: var(--surface);
+    transition: border-color 0.15s;
+    cursor: pointer;
+}
+.account-card:hover { border-color: var(--primary); }
+.account-card input[type=radio] { flex: 0 0 auto; }
+.account-card .account-name { font-size: 15px; font-weight: 500; }
+.account-card .account-email { font-size: 13px; color: var(--text-secondary); }
+
+/* Limitation notes */
+.limitation-box {
+    background: #fff3cd;
+    border: 1px solid #e6a700;
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #8a6d00;
+    margin: 12px 0;
+}
+.limitation-box strong { font-weight: 700; }
+
+/* Reconciliation table */
+.reconciliation-row {
+    display: flex;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+}
+.reconciliation-row:last-child { border-bottom: none; }
+.reconciliation-candidate { flex: 1; }
+.reconciliation-gbp { flex: 1; }
+.reconciliation-status { flex: 0 0 140px; text-align: center; }
+

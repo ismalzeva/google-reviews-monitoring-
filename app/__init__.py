@@ -40,6 +40,9 @@ def create_app(config_name=None):
     from app.routes.discovery import bp as discovery_bp
     app.register_blueprint(discovery_bp)
 
+    from app.routes.google import google_bp
+    app.register_blueprint(google_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

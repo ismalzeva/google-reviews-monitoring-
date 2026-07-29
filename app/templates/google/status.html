@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Google Business Profile</h2>
+    <p class="text-muted">{{ business.name }}</p>
+</div>
+
+{% if is_mock and connection and connection.status != 'disconnected' %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+    <i class="ph ph-warning-circle" style="font-size: 1.5rem;"></i>
+    <div>
+        <strong>Demo / Mock Mode</strong> — Belum terhubung ke Google Business Profile yang sesungguhnya.
+        Seluruh data akun, lokasi, dan review bersifat simulasi.
+        <br><small>Google OAuth credential, consent screen, dan API approval belum tersedia.</small>
+    </div>
+</div>
+{% endif %}
+
+{% if connection is none %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <div class="mb-4">
+            <i class="ph ph-google-logo" style="font-size: 4rem; color: #4285F4;"></i>
+        </div>
+        <h4>Belum Terhubung ke Google</h4>
+        <p class="text-muted mt-2">
+            Hubungkan akun Google Business Profile untuk memonitor ulasan,
+            mengelola lokasi, dan merespon pelanggan.
+        </p>
+        <a href="{{ url_for('google.connect') }}" class="btn btn-google mt-3">
+            <i class="ph ph-google-logo"></i> Connect Google Business Profile
+        </a>
+    </div>
+</div>
+
+{% elif connection.status == 'oauth_in_progress' %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <h4>Proses OAuth Sedang Berlangsung</h4>
+        <p class="text-muted mt-2">Mengarahkan ke Google untuk autentikasi...</p>
+        <div class="spinner-border text-primary mt-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="mt-3">
+            <a href="{{ url_for('google.connect') }}" class="btn btn-primary">
+                Coba Lagi
+            </a>
+        </div>
+    </div>
+</div>
+
+{% elif connection.status == 'disconnected' %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <div class="mb-4">
+            <i class="ph ph-plug-disconnected" style="font-size: 4rem; color: #dc3545;"></i>
+        </div>
+        <h4>Koneksi Terputus</h4>
+        <p class="text-muted mt-2">
+            Koneksi Google Business Profile telah diputus.
+        </p>
+        <a href="{{ url_for('google.connect') }}" class="btn btn-google mt-3">
+            <i class="ph ph-google-logo"></i> Hubungkan Lagi
+        </a>
+    </div>
+</div>
+
+{% else %}
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Status Koneksi</h5>
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Status</dt>
+                    <dd class="col-sm-7">
+                        {% set status_map = {
+                            'connected': ('success', 'Terhubung (Produksi)'),
+                            'mock_connected': ('warning', 'Mock / Simulasi'),
+                            'token_expired': ('warning', 'Token Expired'),
+                            'token_revoked': ('danger', 'Token Dicabut'),
+                            'permission_denied': ('danger', 'Izin Ditolak'),
+                            'partial_access': ('warning', 'Akses Sebagian'),
+                            'api_access_pending': ('info', 'API Access Pending'),
+                            'quota_unavailable': ('secondary', 'Kuota Tidak Tersedia'),
+                            'disconnected': ('secondary', 'Terputus'),
+                        } %}
+                        {% set badge_class, status_label = status_map.get(connection.status, ('secondary', connection.status)) %}
+                        <span class="badge bg-{{ badge_class }}">{{ status_label }}</span>
+                    </dd>
+                    <dt class="col-sm-5">Adapter Mode</dt>
+                    <dd class="col-sm-7">
+                        <span class="badge bg-{{ 'secondary' if is_mock else 'success' }}">
+                            {{ 'Mock / Simulasi' if is_mock else 'Produksi' }}
+                        </span>
+                    </dd>
+                    <dt class="col-sm-5">Terhubung Sejak</dt>
+                    <dd class="col-sm-7">{{ connection.connected_at | datetime_beauty if connection.connected_at else '-' }}</dd>
+                    <dt class="col-sm-5">Account Terpilih</dt>
+                    <dd class="col-sm-7">{{ connection.selected_account_id or 'Belum dipilih' }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Health Check</h5>
+                {% if health %}
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">OAuth Token</dt>
+                    <dd class="col-sm-7">
+                        {% if health.oauth_token_valid %}
+                        <span class="badge bg-success">Valid</span>
+                        {% else %}
+                        <span class="badge bg-danger">Invalid</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-5">API Access</dt>
+                    <dd class="col-sm-7">
+                        {% if health.api_access_available %}
+                            {% if health.adapter_mode == 'mock' %}
+                            <span class="badge bg-warning">Mock Only</span>
+                            {% else %}
+                            <span class="badge bg-success">Tersedia</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="badge bg-danger">Tidak Tersedia</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-5">Lokasi Resmi</dt>
+                    <dd class="col-sm-7">{{ health.location_count or '-' }}</dd>
+                    <dt class="col-sm-5">Review Endpoint</dt>
+                    <dd class="col-sm-7">
+                        <span class="badge bg-secondary">Mock Only / Nonaktif</span>
+                    </dd>
+                    <dt class="col-sm-5">Reply Capability</dt>
+                    <dd class="col-sm-7">
+                        <span class="badge bg-danger">Disabled</span>
+                    </dd>
+                </dl>
+                {% if health.blocking_reason %}
+                <div class="mt-3">
+                    <small class="text-danger d-block mb-1"><strong>Blocker:</strong></small>
+                    {% for reason in health.blocking_reason %}
+                        {% if reason %}
+                        <small class="d-block text-muted">• {{ reason }}</small>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if health.reconnect_required %}
+                <div class="alert alert-warning mt-3 mb-0 py-2">
+                    <i class="ph ph-warning-circle"></i> Reconnect diperlukan
+                </div>
+                {% endif %}
+                {% if is_mock %}
+                <div class="alert alert-warning mt-3 mb-0 py-2">
+                    <i class="ph ph-info"></i> Mode simulasi — bukan koneksi produksi.
+                </div>
+                {% endif %}
+                {% else %}
+                <p class="text-muted">Health check tidak tersedia.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if connection.status in ('connected', 'mock_connected', 'partial_access') %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="{{ url_for('google.accounts') }}" class="btn btn-outline-primary w-100">
+            <i class="ph ph-buildings"></i> Accounts
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('google.locations') }}" class="btn btn-outline-primary w-100">
+            <i class="ph ph-map-pin"></i> Lokasi
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('google.reconciliation') }}" class="btn btn-outline-primary w-100">
+            <i class="ph ph-git-merge"></i> Rekonsiliasi
+        </a>
+    </div>
+    <div class="col-md-3">
+        <form method="POST" action="{{ url_for('google.disconnect') }}" onsubmit="return confirm('Putuskan koneksi Google? Semua akses review akan dinonaktifkan.');">
+            <input type="hidden" name="revoke" value="yes">
+            <button type="submit" class="btn btn-outline-danger w-100">
+                <i class="ph ph-plug-disconnected"></i> Disconnect
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

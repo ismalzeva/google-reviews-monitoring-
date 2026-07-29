@@ -146,6 +146,25 @@ class GoogleConnection(db.Model):
     connected_by = db.Column(db.String(36), db.ForeignKey('users.id'))
     connected_at = db.Column(db.DateTime(timezone=True))
     last_health_check = db.Column(db.DateTime(timezone=True))
+    last_error = db.Column(db.Text)
+    last_sync = db.Column(db.DateTime(timezone=True))
+    adapter_mode = db.Column(db.String(20), default='mock')  # 'mock' | 'production'
+
+
+# ─── OAUTH STATE ─────────────────────────────────────────
+class OAuthState(db.Model):
+    __tablename__ = 'oauth_states'
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    nonce_hash = db.Column(db.String(128), nullable=False, unique=True, index=True)
+    user_id = db.Column(db.String(36), nullable=False)
+    tenant_id = db.Column(db.String(36), nullable=False)
+    business_id = db.Column(db.String(36), nullable=False)
+    connection_id = db.Column(db.String(36), nullable=False)
+    redirect_intent = db.Column(db.String(200), default='/google/accounts')
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    consumed_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
 
 
 # ─── IMPORT BATCH ───────────────────────────────────────

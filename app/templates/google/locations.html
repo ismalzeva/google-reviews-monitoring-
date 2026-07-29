@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+    <div>
+        <h2>Lokasi Resmi Google Business Profile</h2>
+        <p class="text-muted">Daftar lokasi resmi dari account Google Business Profile yang terhubung.</p>
+    </div>
+    <div>
+        <span class="badge bg-light text-dark px-3 py-2">
+            <i class="ph ph-map-pin"></i> {{ locations|length }} lokasi
+        </span>
+    </div>
+</div>
+
+{% if is_mock %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-3 py-2">
+    <i class="ph ph-warning-circle"></i>
+    <div>
+        <strong>Mock API:</strong> Data lokasi di bawah adalah simulasi. Google API asli belum dikonfigurasi.
+        Lokasi mock tidak mewakili data produksi Google Business Profile.
+        <span class="badge bg-warning ms-1">Mock Only</span>
+    </div>
+</div>
+{% endif %}
+
+{% if locations|length == 0 %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="ph ph-map-pin-slash" style="font-size: 3rem; color: #6c757d;"></i>
+        <h5 class="mt-3">Tidak Ada Lokasi</h5>
+        <p class="text-muted">Account ini tidak memiliki lokasi Google Business Profile.</p>
+    </div>
+</div>
+{% else %}
+<div class="table-responsive">
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Nama Lokasi</th>
+                <th>Alamat</th>
+                <th>Telepon</th>
+                <th>Status</th>
+                <th>Sumber</th>
+                <th>Review</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for loc in locations %}
+            <tr>
+                <td>
+                    <strong>{{ loc.title }}</strong>
+                    {% if loc.store_code %}
+                    <br><small class="text-muted">Kode: {{ loc.store_code }}</small>
+                    {% endif %}
+                </td>
+                <td>
+                    {{ (loc.storefront_address.address_lines or [''])|join(', ') }}
+                    <br><small class="text-muted">{{ loc.storefront_address.locality }}, {{ loc.storefront_address.administrative_area }}</small>
+                </td>
+                <td>{{ loc.phone_numbers.primary_phone or '-' }}</td>
+                <td>
+                    {% set access_colors = {
+                        'direct_access': 'success',
+                        'manager_access': 'info',
+                        'no_owner': 'warning',
+                    } %}
+                    <span class="badge bg-{{ access_colors.get(loc.access_status, 'secondary') }}">
+                        {{ loc.access_status }}
+                    </span>
+                </td>
+                <td>
+                    {% if is_mock %}
+                    <span class="badge bg-warning">Mock</span>
+                    {% else %}
+                    <span class="badge bg-success">Production</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if is_mock %}
+                    <span class="badge bg-secondary">Mock Only</span>
+                    {% elif loc.review_endpoint_accessible %}
+                    <span class="badge bg-success">Aksesibel</span>
+                    {% else %}
+                    <span class="badge bg-danger">Tidak</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="mt-4">
+    <a href="{{ url_for('google.reconciliation') }}" class="btn btn-primary">
+        <i class="ph ph-git-merge"></i> Lanjut ke Rekonsiliasi
+    </a>
+    <a href="{{ url_for('google.status') }}" class="btn btn-outline-secondary ms-2">
+        <i class="ph ph-arrow-left"></i> Kembali ke Status
+    </a>
+</div>
+{% endblock %}

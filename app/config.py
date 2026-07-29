@@ -19,6 +19,11 @@ class Config:
     APP_NAME = os.environ.get('APP_NAME', 'Google Reviews Monitoring')
     APP_PORT = int(os.environ.get('APP_PORT', 8083))
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+    GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+    GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:8083/google/callback')
+
 
 class TestingConfig(Config):
     TESTING = True

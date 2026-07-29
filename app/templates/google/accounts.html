@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Pilih Account Google Business Profile</h2>
+    <p class="text-muted">Pilih account yang akan digunakan untuk memonitor ulasan {{ business.name }}.</p>
+</div>
+
+{% if is_mock %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+    <i class="ph ph-warning-circle" style="font-size: 1.5rem;"></i>
+    <div>
+        <strong>Demo / Mock Mode</strong> — Data akun di bawah adalah simulasi dan tidak mencerminkan data produksi Google Business Profile.
+    </div>
+</div>
+{% endif %}
+
+{% if accounts|length == 0 %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="ph ph-buildings" style="font-size: 3rem; color: #6c757d;"></i>
+        <h5 class="mt-3">Tidak Ada Account</h5>
+        <p class="text-muted">Akun Google ini tidak memiliki akses ke Google Business Profile.</p>
+    </div>
+</div>
+
+{% elif accounts|length == 1 %}
+<div class="card">
+    <div class="card-body">
+        <div class="alert alert-info d-flex align-items-center gap-2">
+            <i class="ph ph-info"></i>
+            <span>Hanya ditemukan 1 account yang dapat diakses. Account ini akan digunakan secara otomatis.</span>
+        </div>
+
+        <div class="account-card p-3 border rounded mb-3">
+            <div class="d-flex align-items-start justify-content-between">
+                <div>
+                    <h5 class="mb-1">{{ accounts[0].account_name }}</h5>
+                    <p class="text-muted mb-1">
+                        <span class="badge bg-light text-dark">{{ accounts[0].account_type }}</span>
+                        <span class="badge bg-light text-dark ms-1">{{ accounts[0].permission_level }}</span>
+                        {% if is_mock %}<span class="badge bg-warning ms-1">Mock</span>{% endif %}
+                    </p>
+                    <small class="text-muted">
+                        Pemilik: {{ accounts[0].owner_name }} &middot;
+                        {{ accounts[0].location_count }} lokasi
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('google.select_account') }}">
+            <input type="hidden" name="account_id" value="{{ accounts[0].account_id }}">
+            <button type="submit" class="btn btn-primary">
+                <i class="ph ph-check-circle"></i> Gunakan Account Ini
+            </button>
+        </form>
+
+        <div class="mt-3">
+            <a href="{{ url_for('google.disconnect') }}" class="btn btn-outline-danger btn-sm" onclick="return confirm('Putuskan koneksi?')">
+                <i class="ph ph-plug-disconnected"></i> Ganti / Putuskan Koneksi
+            </a>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
+    <i class="ph ph-warning-circle"></i>
+    <span>Ditemukan {{ accounts|length }} account. Pilih salah satu untuk melanjutkan.</span>
+</div>
+
+<div class="row g-3">
+    {% for account in accounts %}
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div>
+                        <h5 class="card-title mb-1">{{ account.account_name }}</h5>
+                        <p class="text-muted mb-2">
+                            <span class="badge bg-light text-dark">{{ account.account_type }}</span>
+                            <span class="badge bg-light text-dark ms-1">{{ account.permission_level }}</span>
+                            {% if is_mock %}<span class="badge bg-warning ms-1">Mock</span>{% endif %}
+                        </p>
+                        <small class="text-muted d-block">
+                            Pemilik: {{ account.owner_name }}
+                        </small>
+                        <small class="text-muted d-block">
+                            {{ account.location_count }} lokasi terdaftar
+                        </small>
+                    </div>
+                </div>
+                <form method="POST" action="{{ url_for('google.select_account') }}" class="mt-3">
+                    <input type="hidden" name="account_id" value="{{ account.account_id }}">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="ph ph-check"></i> Pilih Account Ini
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
