@@ -1,0 +1,11 @@
+# Google Reviews Monitoring — .gitignore
+.env
+*.pyc
+__pycache__/
+*.db
+*.sqlite3
+data/
+instance/
+*.log
+.env.*
+!.env.example

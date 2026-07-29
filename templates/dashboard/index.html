@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Reviews Monitor{% endblock %}
+{% block content %}
+<div class="dashboard">
+    {% if business %}
+    <div class="dashboard-header">
+        <h1>{{ business.brand_name }}</h1>
+        <p class="subtitle">{{ business.name }} · {{ business.country }}</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.outlets }}</div>
+            <div class="stat-label">Outlet</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.reviews }}</div>
+            <div class="stat-label">Review</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.issues_open }}</div>
+            <div class="stat-label">Issue Terbuka</div>
+        </div>
+    </div>
+
+    <div class="info-box">
+        <h3>🚀 Selamat Datang!</h3>
+        <p>Aplikasi ini akan membantu Anda memantau dan merespons Google Reviews.</p>
+        <p><strong>Langkah selanjutnya:</strong></p>
+        <ol>
+            <li>Cari dan verifikasi lokasi cabang Anda</li>
+            <li>Hubungkan akun Google Business Profile</li>
+            <li>Tarik review dari lokasi resmi</li>
+        </ol>
+        <p class="text-muted">Fitur-fitur di atas akan tersedia pada fase berikutnya.</p>
+    </div>
+    {% else %}
+    <div class="info-box">
+        <h2>Belum Ada Bisnis</h2>
+        <p>Anda belum terhubung dengan bisnis apapun. Hubungi admin untuk mengundang Anda.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
