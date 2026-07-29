@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Daftar Kandidat — Reviews Monitor{% endblock %}
+{% block content %}
+<div class="candidates-page">
+    <div class="page-header">
+        <h1>📋 Daftar Kandidat</h1>
+        <p class="text-muted">Semua kandidat lokasi untuk {{ business.brand_name if business else 'brand' }}.</p>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="card filter-card">
+        <form method="GET" class="filter-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="status">Filter Status</label>
+                    <select id="status" name="status" class="form-control" onchange="this.form.submit()">
+                        <option value="">Semua</option>
+                        <option value="pending" {{ 'selected' if status_filter == 'pending' }}>⏳ Menunggu</option>
+                        <option value="owner_confirmed" {{ 'selected' if status_filter == 'owner_confirmed' }}>✅ Terverifikasi</option>
+                        <option value="owner_rejected" {{ 'selected' if status_filter == 'owner_rejected' }}>❌ Ditolak</option>
+                        <option value="old_or_closed" {{ 'selected' if status_filter == 'old_or_closed' }}>🕰️ Lama/Tutup</option>
+                        <option value="possible_duplicate" {{ 'selected' if status_filter == 'possible_duplicate' }}>📋 Duplikat</option>
+                        <option value="uncertain" {{ 'selected' if status_filter == 'uncertain' }}>❓ Belum Yakin</option>
+                    </select>
+                </div>
+                <div class="form-group form-group-btn">
+                    <label>&nbsp;</label>
+                    <a href="{{ url_for('discovery.search_page') }}" class="btn btn-primary">🔍 Cari Lagi</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- CANDIDATE TABLE -->
+    {% if candidates %}
+    <div class="card">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>Alamat</th>
+                    <th>Rating</th>
+                    <th>Status</th>
+                    <th>Verifikasi</th>
+                    <th>Outlet?</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in candidates %}
+                <tr>
+                    <td><strong>{{ c.display_name }}</strong></td>
+                    <td class="truncate">{{ c.formatted_address }}</td>
+                    <td>{{ c.rating or '-' }} ({{ c.review_count or 0 }})</td>
+                    <td>{{ 'Buka' if c.business_status == 'OPERATIONAL' else 'Tutup' }}</td>
+                    <td>
+                        <span class="badge badge-{{ c.owner_verification_status }}">
+                            {{ c.owner_verification_status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if c.place_id and c.place_id in outlets %}
+                        ✅
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- PAGINATION -->
+    {% if pagination.pages > 1 %}
+    <div class="pagination">
+        {% if pagination.has_prev %}
+        <a href="{{ url_for('discovery.candidate_list', page=pagination.prev_num, status=status_filter) }}" class="btn btn-sm">← Sebelumnya</a>
+        {% endif %}
+        <span class="page-info">Halaman {{ pagination.page }} dari {{ pagination.pages }}</span>
+        {% if pagination.has_next %}
+        <a href="{{ url_for('discovery.candidate_list', page=pagination.next_num, status=status_filter) }}" class="btn btn-sm">Selanjutnya →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="card empty-card">
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>Tidak ada kandidat</h3>
+            <p>Belum ada kandidat dengan filter ini. <a href="{{ url_for('discovery.search_page') }}">Cari brand</a> untuk memulai.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

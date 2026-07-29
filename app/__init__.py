@@ -37,6 +37,9 @@ def create_app(config_name=None):
     from app.routes.dashboard import bp as dashboard_bp
     app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
 
+    from app.routes.discovery import bp as discovery_bp
+    app.register_blueprint(discovery_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

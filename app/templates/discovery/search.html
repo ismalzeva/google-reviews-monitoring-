@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Cari Cabang — Reviews Monitor{% endblock %}
+{% block content %}
+<div class="discover-page">
+    <!-- HEADER -->
+    <div class="page-header">
+        <h1>🔍 Cari & Verifikasi Cabang</h1>
+        <p class="text-muted">Cari semua lokasi {{ business.brand_name if business else 'brand' }} yang muncul di Google Maps, lalu verifikasi mana cabang resmi.</p>
+    </div>
+
+    <!-- SEARCH FORM -->
+    <div class="card search-card">
+        <form method="POST" action="{{ url_for('discovery.search') }}" class="search-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="brand_name">Nama Brand</label>
+                    <input type="text" id="brand_name" name="brand_name"
+                           placeholder="Contoh: Bubur Fay" required
+                           class="form-control" />
+                </div>
+                <div class="form-group">
+                    <label for="city">Kota (opsional)</label>
+                    <input type="text" id="city" name="city"
+                           placeholder="Contoh: Depok, Bekasi..." class="form-control" />
+                </div>
+                <div class="form-group form-group-btn">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary">🔎 Cari</button>
+                </div>
+            </div>
+            <p class="form-note text-muted">
+                ⚡ Mode mock adapter — data contoh Bubur Fay. API key Google Places belum dikonfigurasi.
+            </p>
+        </form>
+    </div>
+
+    <!-- SUMMARY -->
+    {% if candidates is defined and candidates %}
+    <div class="card summary-card">
+        <div class="summary-stats">
+            <div class="stat">
+                <span class="stat-value">{{ candidates|length }}</span>
+                <span class="stat-label">Total Kandidat</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ candidates|selectattr('owner_verification_status', 'equalto', 'owner_confirmed')|list|length }}</span>
+                <span class="stat-label">Diverifikasi ✅</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ candidates|selectattr('owner_verification_status', 'equalto', 'pending')|list|length }}</span>
+                <span class="stat-label">Menunggu</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ candidates|rejectattr('owner_verification_status', 'equalto', 'pending')|rejectattr('owner_verification_status', 'equalto', 'owner_confirmed')|list|length }}</span>
+                <span class="stat-label">Lainnya</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- CANDIDATE LIST -->
+    <div class="candidate-list">
+        {% for candidate in candidates %}
+        <div class="card candidate-card" data-status="{{ candidate.owner_verification_status }}">
+            <div class="candidate-header">
+                <h3>{{ candidate.display_name }}</h3>
+                <span class="badge badge-{{ candidate.owner_verification_status }}">
+                    {% if candidate.owner_verification_status == 'owner_confirmed' %}
+                        ✅ Cabang Terverifikasi
+                    {% elif candidate.owner_verification_status == 'owner_rejected' %}
+                        ❌ Bukan Cabang
+                    {% elif candidate.owner_verification_status == 'old_or_closed' %}
+                        🕰️ Cabang Lama/Tutup
+                    {% elif candidate.owner_verification_status == 'possible_duplicate' %}
+                        📋 Duplikat
+                    {% elif candidate.owner_verification_status == 'uncertain' %}
+                        ❓ Belum Yakin
+                    {% elif candidate.owner_verification_status == 'needs_access_review' %}
+                        🔍 Perlu Dicek
+                    {% else %}
+                        ⏳ Menunggu Verifikasi
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="candidate-details">
+                <div class="detail-item">
+                    <span class="detail-label">📍 Alamat</span>
+                    <span class="detail-value">{{ candidate.formatted_address }}</span>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-item">
+                        <span class="detail-label">⭐ Rating</span>
+                        <span class="detail-value">{{ candidate.rating or '-' }} ({{ candidate.review_count or 0 }} ulasan)</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">🏪 Status</span>
+                        <span class="detail-value">{{ 'Buka' if candidate.business_status == 'OPERATIONAL' else 'Tutup permanen' if candidate.business_status == 'CLOSED_PERMANENTLY' else candidate.business_status }}</span>
+                    </div>
+                </div>
+                {% if candidate.phone %}
+                <div class="detail-item">
+                    <span class="detail-label">📞 Telepon</span>
+                    <span class="detail-value">{{ candidate.phone }}</span>
+                </div>
+                {% endif %}
+                {% if candidate.website %}
+                <div class="detail-item">
+                    <span class="detail-label">🌐 Website</span>
+                    <span class="detail-value"><a href="{{ candidate.website }}" target="_blank">{{ candidate.website }}</a></span>
+                </div>
+                {% endif %}
+                {% if candidate.match_confidence is not none %}
+                <div class="detail-item">
+                    <span class="detail-label">🎯 Confidence</span>
+                    <span class="detail-value">{{ (candidate.match_confidence * 100)|int }}%</span>
+                </div>
+                {% endif %}
+                {% if candidate.match_reasons %}
+                <div class="detail-item">
+                    <span class="detail-label">Alasan</span>
+                    <span class="detail-value reasons">
+                        {% for reason in candidate.match_reasons %}
+                        <span class="reason-tag">{{ reason }}</span>
+                        {% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+                {% if candidate.google_maps_uri %}
+                <div class="detail-item">
+                    <a href="{{ candidate.google_maps_uri }}" target="_blank" class="maps-link">🔗 Lihat di Google Maps</a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- VERIFICATION BUTTONS (only if not yet confirmed/rejected) -->
+            {% if candidate.owner_verification_status == 'pending' %}
+            <div class="verification-actions">
+                <form method="POST" action="{{ url_for('discovery.verify') }}" class="verify-form">
+                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                    <input type="hidden" name="decision" value="owner_confirmed">
+                    <button type="submit" class="btn btn-success btn-sm">✅ Ini cabang</button>
+                </form>
+                <form method="POST" action="{{ url_for('discovery.verify') }}" class="verify-form">
+                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                    <input type="hidden" name="decision" value="owner_rejected">
+                    <button type="submit" class="btn btn-danger btn-sm">❌ Bukan cabang</button>
+                </form>
+                <form method="POST" action="{{ url_for('discovery.verify') }}" class="verify-form">
+                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                    <input type="hidden" name="decision" value="old_or_closed">
+                    <button type="submit" class="btn btn-warning btn-sm">🕰️ Lama/tutup</button>
+                </form>
+                <form method="POST" action="{{ url_for('discovery.verify') }}" class="verify-form">
+                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                    <input type="hidden" name="decision" value="possible_duplicate">
+                    <button type="submit" class="btn btn-secondary btn-sm">📋 Duplikat</button>
+                </form>
+                <form method="POST" action="{{ url_for('discovery.verify') }}" class="verify-form">
+                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                    <input type="hidden" name="decision" value="uncertain">
+                    <button type="submit" class="btn btn-secondary btn-sm">❓ Belum yakin</button>
+                </form>
+                <form method="POST" action="{{ url_for('discovery.verify') }}" class="verify-form verify-with-note">
+                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                    <input type="hidden" name="decision" value="needs_access_review">
+                    <button type="submit" class="btn btn-secondary btn-sm">🔍 Perlu dicek</button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- VERIFIER INFO -->
+            <div class="candidate-meta text-muted">
+                Ditemukan {{ candidate.created_at.strftime('%d %b %Y, %H:%M') if candidate.created_at else '-' }}
+                {% if candidate.owner_verification_status != 'pending' %}
+                · Terakhir diverifikasi: {{ candidate.owner_verification_status }}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card empty-card">
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>Belum ada kandidat</h3>
+            <p>Masukkan nama brand di atas untuk mencari cabang.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.verify-form { display: inline-block; margin: 4px; }
+.verification-actions { padding: 12px 20px; border-top: 1px solid var(--border); text-align: center; }
+</style>
+{% endblock %}

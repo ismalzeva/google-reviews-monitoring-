@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Daftar — Reviews Monitor{% endblock %}
+{% block content %}
+<div class="auth-card">
+    <h2>Daftar Akun Baru</h2>
+    {% if errors %}
+    <div class="alert alert-error">
+        {% for e in errors %}<p>{{ e }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    <form method="POST">
+        <label>Nama Bisnis</label>
+        <input type="text" name="business_name" value="{{ data.get('business_name','') }}" required>
+        <label>Brand</label>
+        <input type="text" name="brand_name" value="{{ data.get('brand_name','') }}" required placeholder="Contoh: Bubur Fay">
+        <label>Nama Lengkap</label>
+        <input type="text" name="display_name" value="{{ data.get('display_name','') }}" required>
+        <label>Email</label>
+        <input type="email" name="email" value="{{ data.get('email','') }}" required>
+        <label>Password (min. 8 karakter)</label>
+        <input type="password" name="password" minlength="8" required>
+        <button type="submit" class="btn btn-primary">Daftar</button>
+    </form>
+    <p class="auth-link">Sudah punya akun? <a href="/auth/login">Login</a></p>
+</div>
+{% endblock %}
