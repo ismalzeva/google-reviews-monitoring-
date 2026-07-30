@@ -1,0 +1,58 @@
+<!-- review/sync_report.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Sync Report</h1>
+  <a href="{{ url_for('review.sync_history') }}" class="btn btn-outline">Back</a>
+</div>
+
+<div class="report-grid">
+  <div class="card">
+    <h3>Overview</h3>
+    <div class="stat-row"><span>Source</span><span class="badge badge-mock">{{ report.source }}</span></div>
+    <div class="stat-row"><span>Started</span><span>{{ report.started_at[:19] }}</span></div>
+    <div class="stat-row"><span>Completed</span><span>{{ report.completed_at[:19] if report.completed_at }}</span></div>
+  </div>
+  <div class="card">
+    <h3>Locations</h3>
+    <div class="stat-row"><span>Requested</span><span>{{ report.locations_requested }}</span></div>
+    <div class="stat-row"><span>Succeeded</span><span class="num-ok">{{ report.locations_succeeded }}</span></div>
+    <div class="stat-row"><span>Failed</span><span class="num-err">{{ report.locations_failed }}</span></div>
+  </div>
+  <div class="card">
+    <h3>Reviews</h3>
+    <div class="stat-row"><span>Received</span><span>{{ report.reviews_received }}</span></div>
+    <div class="stat-row"><span>Created</span><span class="num-ok">{{ report.reviews_created }}</span></div>
+    <div class="stat-row"><span>Updated</span><span>{{ report.reviews_updated }}</span></div>
+    <div class="stat-row"><span>Unchanged</span><span>{{ report.reviews_unchanged }}</span></div>
+    <div class="stat-row"><span>Rating-only</span><span>{{ report.rating_only_reviews }}</span></div>
+    <div class="stat-row"><span>Duplicates skipped</span><span>{{ report.duplicates_skipped }}</span></div>
+  </div>
+</div>
+
+{% if report.errors %}
+<div class="card errors-card">
+  <h3>Errors</h3>
+  <ul>
+  {% for err in report.errors %}
+    <li>{{ err.outlet }}: {{ err.error }}</li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<style>
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card { background: #1e1e2e; border: 1px solid #313244; border-radius: 12px; padding: 20px; }
+.card h3 { margin: 0 0 16px; font-size: 1em; }
+.stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #31324444; }
+.stat-row:last-child { border-bottom: none; }
+.num-ok { color: #4caf50; }
+.num-err { color: #f38ba8; }
+.badge { padding: 2px 8px; border-radius: 8px; font-size: 0.8em; }
+.badge-mock { background: #f9a82533; color: #f9a825; }
+.errors-card ul { color: #f38ba8; padding-left: 16px; }
+.btn-outline { padding: 8px 16px; border-radius: 8px; border: 1px solid #89b4fa44; color: #89b4fa; text-decoration: none; }
+</style>
+{% endblock %}

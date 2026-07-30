@@ -287,7 +287,10 @@ def validate_oauth_state(state_nonce: str, user_id: str, tenant_id: str,
     if state.consumed_at is not None:
         raise ValueError("oauth_state_replayed")
 
-    if state.expires_at < datetime.now(timezone.utc):
+    expires_at = state.expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
         raise ValueError("oauth_state_expired")
 
     if state.user_id != user_id:
@@ -619,7 +622,7 @@ def save_reconciliation(business_id: str, tenant_id: str, results: list[dict],
                     owner_verification_status=cand.owner_verification_status,
                     gbp_match_status='matched',
                     status='active',
-                    monitor_enabled=False,     # Default off
+                    monitor_enabled=(cand.owner_verification_status in ('verified', 'owner_confirmed')),
                     reply_enabled=False,       # Never enabled in mock mode
                 )
                 db.session.add(outlet)
@@ -690,7 +693,10 @@ def check_connection_health(business_id: str, tenant_id: str) -> dict:
 
     token_valid = False
     if conn.encrypted_access_token_ref:
-        if conn.token_expiry and conn.token_expiry > now:
+        exp = conn.token_expiry
+        if exp is not None and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp and exp > now:
             token_valid = True
         elif is_mock:
             # Mock tokens are always "valid" for UI testing

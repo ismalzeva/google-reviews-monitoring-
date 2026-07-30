@@ -1,0 +1,102 @@
+<!-- review/list.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Reviews</h1>
+  <span class="badge badge-mock">MOCK DATA</span>
+</div>
+
+<div class="filters">
+  <form method="GET" class="filter-form">
+    <select name="outlet_id" class="form-select" onchange="this.form.submit()">
+      <option value="">All Outlets</option>
+      {% for o in outlets %}
+      <option value="{{ o.id }}" {% if selected_outlet == o.id %}selected{% endif %}>{{ o.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <span class="total-badge">{{ reviews.total }} reviews</span>
+</div>
+
+{% if reviews.items %}
+<table class="review-table">
+  <thead>
+    <tr>
+      <th>Source</th>
+      <th>Reviewer</th>
+      <th>Rating</th>
+      <th>Comment</th>
+      <th>Date</th>
+      <th>Status</th>
+      <th>Version</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in reviews.items %}
+    <tr class="{% if not r.has_text %}rating-only{% endif %}">
+      <td><span class="badge badge-{{ r.source }}">{{ r.source[:12] }}</span></td>
+      <td>{{ r.reviewer_display_name }}</td>
+      <td class="stars">{{ '★' * r.star_rating }}{{ '☆' * (5 - r.star_rating) }}</td>
+      <td class="comment-cell">
+        {% if r.has_text %}
+          {{ r.comment[:100] }}{% if r.comment|length > 100 %}...{% endif %}
+        {% else %}
+          <span class="rating-only-label">Rating only (no text)</span>
+        {% endif %}
+      </td>
+      <td class="date-cell">{{ r.create_time.strftime('%d %b %Y') if r.create_time else 'N/A' }}</td>
+      <td>
+        {% if r.source_visibility_status == 'unavailable' %}
+          <span class="badge badge-unavailable">Unavailable</span>
+        {% else %}
+          <span class="badge badge-available">Available</span>
+        {% endif %}
+      </td>
+      <td class="mono">{{ r.current_version }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="pagination">
+  {% if reviews.has_prev %}
+    <a href="{{ url_for('review.review_list', page=reviews.prev_num, outlet_id=selected_outlet) }}" class="btn btn-outline">Prev</a>
+  {% endif %}
+  <span class="page-info">Page {{ reviews.page }} of {{ reviews.pages }}</span>
+  {% if reviews.has_next %}
+    <a href="{{ url_for('review.review_list', page=reviews.next_num, outlet_id=selected_outlet) }}" class="btn btn-outline">Next</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="empty-card">
+  <p>No reviews yet. <a href="{{ url_for('review.sync') }}">Sync reviews</a> or <a href="{{ url_for('review.import_reviews') }}">import from Outscraper</a>.</p>
+</div>
+{% endif %}
+
+<style>
+.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.filters { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.filter-form { margin: 0; }
+.form-select { padding: 8px; border-radius: 8px; border: 1px solid #45475a; background: #1e1e2e; color: #cdd6f4; }
+.total-badge { background: #45475a; padding: 4px 12px; border-radius: 12px; font-size: 0.85em; }
+.review-table { width: 100%; border-collapse: collapse; }
+.review-table th { text-align: left; padding: 12px; background: #1e1e2e; border-bottom: 2px solid #313244; color: #a6adc8; font-size: 0.85em; }
+.review-table td { padding: 12px; border-bottom: 1px solid #313244; }
+.review-table tr:hover { background: #31324433; }
+.review-table tr.rating-only { opacity: 0.7; }
+.comment-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.date-cell { font-size: 0.9em; color: #a6adc8; }
+.stars { color: #f9a825; }
+.rating-only-label { color: #a6adc8; font-style: italic; font-size: 0.85em; }
+.mono { font-family: monospace; }
+.badge { padding: 2px 8px; border-radius: 8px; font-size: 0.8em; }
+.badge-mock { background: #f9a82533; color: #f9a825; }
+.badge-outscraper_import { background: #89b4fa33; color: #89b4fa; }
+.badge-available { background: #4caf5033; color: #4caf50; }
+.badge-unavailable { background: #f38ba833; color: #f38ba8; }
+.empty-card { text-align: center; padding: 60px; background: #1e1e2e; border-radius: 12px; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 20px; }
+.page-info { color: #a6adc8; }
+.btn-outline { padding: 6px 14px; border-radius: 6px; border: 1px solid #89b4fa44; color: #89b4fa; text-decoration: none; }
+</style>
+{% endblock %}

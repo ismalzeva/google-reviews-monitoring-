@@ -43,6 +43,9 @@ def create_app(config_name=None):
     from app.routes.google import google_bp
     app.register_blueprint(google_bp)
 
+    from app.routes.review import review_bp
+    app.register_blueprint(review_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

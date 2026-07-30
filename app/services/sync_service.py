@@ -1,0 +1,261 @@
+"""Sync service — historical review synchronization with progress tracking."""
+
+import hashlib
+import json
+import logging
+from datetime import datetime, timezone
+
+from app import db
+from app.models.entities import (
+    Business, Outlet, GoogleConnection, SyncReport, AuditLog
+)
+from app.services.review_service import normalize_review, upsert_review
+from app.services.review_source_adapter import get_adapter
+
+logger = logging.getLogger(__name__)
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def sync_reviews(
+    tenant_id: str,
+    business_id: str,
+    source: str = "mock",
+    outlet_ids: list = None,
+    upsert_callback=None,
+) -> dict:
+    """Historical sync for one or more outlets. Returns sync report."""
+    if upsert_callback is None:
+        upsert_callback = upsert_review
+
+    report = SyncReport(
+        tenant_id=tenant_id,
+        business_id=business_id,
+        source=source,
+        started_at=_now(),
+        locations_requested=0,
+        locations_succeeded=0,
+        locations_failed=0,
+        reviews_received=0,
+        reviews_created=0,
+        reviews_updated=0,
+        reviews_unchanged=0,
+        rating_only_reviews=0,
+        duplicates_skipped=0,
+        analysis_jobs_created=0,
+    )
+
+    adapter = get_adapter(source)
+    connection = GoogleConnection.query.filter_by(
+        tenant_id=tenant_id, business_id=business_id
+    ).first()
+
+    # Determine which outlets to process
+    query = Outlet.query.filter(
+        Outlet.tenant_id == tenant_id,
+        Outlet.business_id == business_id,
+        Outlet.monitor_enabled == True,
+    )
+    if outlet_ids:
+        query = query.filter(Outlet.id.in_(outlet_ids))
+
+    outlets = query.all()
+    report.locations_requested = len(outlets)
+
+    for outlet in outlets:
+        if outlet.status == "old_or_closed":
+            logger.info("Skipping old_or_closed outlet: %s", outlet.name)
+            continue
+
+        location_id = outlet.gbp_location_id
+        if not location_id:
+            report.locations_failed += 1
+            if not report.errors:
+                report.errors = []
+            report.errors.append({"outlet": outlet.name, "error": "No google_location_id"})
+            continue
+
+        try:
+            result = _sync_location(
+                tenant_id, business_id, outlet, source, adapter, upsert_callback
+            )
+            report.reviews_received += result.get("received", 0)
+            report.reviews_created += result.get("created", 0)
+            report.reviews_updated += result.get("updated", 0)
+            report.reviews_unchanged += result.get("unchanged", 0)
+            report.rating_only_reviews += result.get("rating_only", 0)
+            report.duplicates_skipped += result.get("duplicates", 0)
+            report.locations_succeeded += 1
+        except Exception as e:
+            logger.exception("Sync failed for outlet %s: %s", outlet.name, e)
+            report.locations_failed += 1
+            if not report.errors:
+                report.errors = []
+            report.errors.append({"outlet": outlet.name, "error": str(e)})
+
+    report.completed_at = _now()
+    db.session.add(report)
+    db.session.commit()
+
+    # Audit log
+    audit = AuditLog(
+        tenant_id=tenant_id,
+        actor_type="system",
+        action="sync.completed",
+        entity_type="sync_report",
+        entity_id=report.id,
+        after_json={
+            "source": source,
+            "business_id": business_id,
+            "locations_succeeded": report.locations_succeeded,
+            "locations_failed": report.locations_failed,
+            "reviews_created": report.reviews_created,
+            "reviews_updated": report.reviews_updated,
+        },
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return {
+        "report_id": report.id,
+        "source": source,
+        "locations_requested": report.locations_requested,
+        "locations_succeeded": report.locations_succeeded,
+        "locations_failed": report.locations_failed,
+        "reviews_received": report.reviews_received,
+        "reviews_created": report.reviews_created,
+        "reviews_updated": report.reviews_updated,
+        "reviews_unchanged": report.reviews_unchanged,
+        "rating_only_reviews": report.rating_only_reviews,
+        "duplicates_skipped": report.duplicates_skipped,
+        "errors": report.errors,
+        "started_at": report.started_at.isoformat(),
+        "completed_at": report.completed_at.isoformat(),
+    }
+
+
+def _sync_location(
+    tenant_id, business_id, outlet, source, adapter, upsert_callback
+):
+    """Sync a single location via paginated adapter calls."""
+    result = {
+        "received": 0, "created": 0, "updated": 0,
+        "unchanged": 0, "rating_only": 0, "duplicates": 0,
+    }
+
+    page_token = None
+    while True:
+        page = adapter.list_reviews(
+            business_id=business_id,
+            location_id=outlet.gbp_location_id,
+            page_token=page_token,
+            page_size=10,
+        )
+
+        if page.get("error"):
+            raise RuntimeError(page["error"])
+
+        for review_data in page.get("reviews", []):
+            result["received"] += 1
+
+            # Build raw payload
+            raw_payload = review_data.copy()
+
+            # Prepare source_review_name for counting
+            source_review_name = review_data.get("review_name", f"mock/{outlet.id}/{result['received']}")
+
+            # Normalize via shared normalizer (handles datetime parsing etc.)
+            normalized = normalize_review(
+                tenant_id, business_id, outlet.id, source, review_data
+            )
+            # Preserve the source_review_name from raw data
+            normalized["source_review_name"] = source_review_name
+
+            # Check if rating-only
+            has_text = bool(review_data.get("comment"))
+            if not has_text:
+                result["rating_only"] += 1
+
+            # Call upsert
+            upsert_result = upsert_callback(
+                tenant_id=tenant_id,
+                business_id=business_id,
+                outlet_id=outlet.id,
+                source=source,
+                source_review_name=source_review_name,
+                normalized=normalized,
+                raw_payload=raw_payload,
+            )
+
+            status = upsert_result.get("status", "unchanged")
+            if status == "created":
+                result["created"] += 1
+            elif status == "updated":
+                result["updated"] += 1
+            elif status == "unchanged":
+                result["unchanged"] += 1
+            elif status == "duplicate":
+                result["duplicates"] += 1
+
+        page_token = page.get("next_page_token")
+        if not page_token:
+            break
+
+    # Update connection last_sync
+    conn = GoogleConnection.query.filter_by(
+        tenant_id=tenant_id, business_id=business_id
+    ).first()
+    if conn:
+        conn.last_sync = _now()
+        db.session.add(conn)
+        db.session.commit()
+
+    return result
+
+
+def get_sync_report(report_id: str, tenant_id: str) -> dict:
+    """Get a sync report by ID with tenant isolation."""
+    report = SyncReport.query.filter_by(id=report_id, tenant_id=tenant_id).first()
+    if not report:
+        return None
+    return {
+        "id": report.id,
+        "tenant_id": report.tenant_id,
+        "business_id": report.business_id,
+        "source": report.source,
+        "locations_requested": report.locations_requested,
+        "locations_succeeded": report.locations_succeeded,
+        "locations_failed": report.locations_failed,
+        "reviews_received": report.reviews_received,
+        "reviews_created": report.reviews_created,
+        "reviews_updated": report.reviews_updated,
+        "reviews_unchanged": report.reviews_unchanged,
+        "rating_only_reviews": report.rating_only_reviews,
+        "duplicates_skipped": report.duplicates_skipped,
+        "errors": report.errors,
+        "started_at": report.started_at.isoformat() if report.started_at else None,
+        "completed_at": report.completed_at.isoformat() if report.completed_at else None,
+    }
+
+
+def list_sync_reports(tenant_id: str, business_id: str = None, limit: int = 20) -> list:
+    """List recent sync reports for a tenant."""
+    query = SyncReport.query.filter_by(tenant_id=tenant_id)
+    if business_id:
+        query = query.filter_by(business_id=business_id)
+    query = query.order_by(SyncReport.created_at.desc()).limit(limit)
+    reports = []
+    for r in query:
+        reports.append({
+            "id": r.id,
+            "business_id": r.business_id,
+            "source": r.source,
+            "locations_succeeded": r.locations_succeeded,
+            "locations_failed": r.locations_failed,
+            "reviews_created": r.reviews_created,
+            "started_at": r.started_at.isoformat() if r.started_at else None,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        })
+    return reports

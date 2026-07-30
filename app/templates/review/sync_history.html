@@ -1,0 +1,56 @@
+<!-- review/sync_history.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Sync History</h1>
+  <a href="{{ url_for('review.sources') }}" class="btn btn-outline">Back to Sources</a>
+</div>
+
+{% if reports %}
+<table class="sync-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Source</th>
+      <th>Succeeded</th>
+      <th>Failed</th>
+      <th>Created</th>
+      <th>Started</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in reports %}
+    <tr>
+      <td class="mono">{{ r.id[:8] }}...</td>
+      <td><span class="badge badge-{{ 'mock' if r.source == 'mock' else '' }}">{{ r.source }}</span></td>
+      <td>{{ r.locations_succeeded }}</td>
+      <td>{{ r.locations_failed }}</td>
+      <td>{{ r.reviews_created }}</td>
+      <td>{{ r.started_at[:10] if r.started_at else 'N/A' }}</td>
+      <td><a href="{{ url_for('review.sync_report_detail', report_id=r.id) }}" class="btn-sm">Detail</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-card">
+  <p>No sync reports yet.</p>
+  <a href="{{ url_for('review.sync') }}" class="btn btn-primary">Start your first sync</a>
+</div>
+{% endif %}
+
+<style>
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.sync-table { width: 100%; border-collapse: collapse; }
+.sync-table th { text-align: left; padding: 12px; background: #1e1e2e; border-bottom: 2px solid #313244; color: #a6adc8; font-size: 0.85em; }
+.sync-table td { padding: 12px; border-bottom: 1px solid #313244; }
+.mono { font-family: monospace; }
+.badge { padding: 2px 8px; border-radius: 8px; font-size: 0.8em; }
+.badge-mock { background: #f9a82533; color: #f9a825; }
+.btn-sm { padding: 4px 12px; border-radius: 6px; background: #45475a; color: #cdd6f4; text-decoration: none; font-size: 0.85em; }
+.btn-outline { padding: 8px 16px; border-radius: 8px; border: 1px solid #89b4fa44; color: #89b4fa; text-decoration: none; }
+.empty-card { text-align: center; padding: 60px 20px; background: #1e1e2e; border-radius: 12px; }
+.btn-primary { padding: 10px 24px; border-radius: 8px; background: #89b4fa; color: #1e1e2e; text-decoration: none; }
+</style>
+{% endblock %}

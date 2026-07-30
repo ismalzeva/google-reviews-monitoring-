@@ -1,0 +1,53 @@
+<!-- review/pubsub.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Pub/Sub Events</h1>
+  <span class="badge badge-mock">MOCK MODE</span>
+</div>
+
+<div class="card">
+  <h3>Pub/Sub Status</h3>
+  <div class="status-row"><span>Mode</span><span class="badge badge-mock">{{ health.pubsub_mode }}</span></div>
+  <div class="status-row"><span>Production</span><span class="badge {% if health.production_pubsub_connected %}badge-success{% else %}badge-mock{% endif %}">
+    {% if health.production_pubsub_connected %}Connected{% else %}Not Connected{% endif %}
+  </span></div>
+</div>
+
+<div class="card">
+  <h3>Configuration (Production — Not Active)</h3>
+  <div class="config-table">
+    <div class="config-row"><span class="config-key">Topic</span><span class="config-val"><code>GOOGLE_PUBSUB_TOPIC</code> (env)</span></div>
+    <div class="config-row"><span class="config-key">Subscription</span><span class="config-val"><code>GOOGLE_PUBSUB_SUBSCRIPTION</code> (env)</span></div>
+    <div class="config-row"><span class="config-key">Mode</span><span class="config-val">Push / Pull config — not configured</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Limitations</h3>
+  <ul class="blocking-list">
+    <li>Google Cloud project belum dikonfigurasi</li>
+    <li>Business Profile notification belum tersedia</li>
+    <li>Pub/Sub credentials belum tersedia</li>
+    <li>Production Pub/Sub events are not being received</li>
+  </ul>
+</div>
+
+<p class="note">Mock events can be simulated via the simulate-event API endpoint for testing.</p>
+
+<style>
+.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.card { background: #1e1e2e; border: 1px solid #313244; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.card h3 { margin: 0 0 16px; }
+.status-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #31324444; }
+.badge { padding: 2px 10px; border-radius: 12px; font-size: 0.85em; }
+.badge-mock { background: #f9a82533; color: #f9a825; }
+.badge-success { background: #4caf5033; color: #4caf50; }
+.config-row { padding: 8px 0; border-bottom: 1px solid #31324444; }
+.config-key { color: #a6adc8; display: inline-block; width: 150px; }
+.config-val code { background: #181825; padding: 2px 6px; border-radius: 4px; }
+.blocking-list { color: #eba0ac; padding-left: 16px; }
+.blocking-list li { margin-bottom: 6px; }
+.note { color: #a6adc8; font-size: 0.9em; margin-top: 16px; }
+</style>
+{% endblock %}

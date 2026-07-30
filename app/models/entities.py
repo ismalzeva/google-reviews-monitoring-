@@ -149,6 +149,10 @@ class GoogleConnection(db.Model):
     last_error = db.Column(db.Text)
     last_sync = db.Column(db.DateTime(timezone=True))
     adapter_mode = db.Column(db.String(20), default='mock')  # 'mock' | 'production'
+    production_api_connected = db.Column(db.Boolean, default=False)
+    review_endpoint_accessible = db.Column(db.Boolean, default=False)
+    reply_capability = db.Column(db.String(20), default='disabled')
+    blocking_reason = db.Column(db.Text)
 
 
 # ─── OAUTH STATE ─────────────────────────────────────────
@@ -207,6 +211,10 @@ class Review(db.Model):
     source_visibility_status = db.Column(db.String(50), default='available')
     current_version = db.Column(db.Integer, default=1)
     raw_payload_hash = db.Column(db.String(64))
+    qualitative_analysis_status = db.Column(db.String(50), default='not_applicable')
+    review_updated = db.Column(db.Boolean, default=False)
+    analysis_reassessment_required = db.Column(db.Boolean, default=False)
+    last_seen_at = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -357,4 +365,48 @@ class AuditLog(db.Model):
     after_json = db.Column(db.JSON)
     reason = db.Column(db.Text)
     trace_id = db.Column(db.String(36))
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+
+
+# ─── REVIEW RAW PAYLOAD ─────────────────────────────────
+class ReviewRawPayload(db.Model):
+    __tablename__ = 'review_raw_payloads'
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(db.String(36), nullable=False, index=True)
+    business_id = db.Column(db.String(36), nullable=False, index=True)
+    review_pk = db.Column(db.String(36), db.ForeignKey('reviews.id'), nullable=True)
+    source = db.Column(db.String(50))
+    source_account_id = db.Column(db.String(200))
+    source_location_id = db.Column(db.String(200))
+    source_review_name = db.Column(db.String(500))
+    raw_payload_hash = db.Column(db.String(64), index=True)
+    raw_payload = db.Column(db.JSON)
+    ingested_at = db.Column(db.DateTime(timezone=True), default=_now)
+    import_batch_id = db.Column(db.String(36), db.ForeignKey('import_batches.id'), nullable=True)
+    sync_id = db.Column(db.String(36), nullable=True)
+
+
+# ─── SYNC REPORT ─────────────────────────────────────────
+class SyncReport(db.Model):
+    __tablename__ = 'sync_reports'
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(db.String(36), nullable=False, index=True)
+    business_id = db.Column(db.String(36), nullable=False)
+    account_id = db.Column(db.String(200))
+    source = db.Column(db.String(50))
+    locations_requested = db.Column(db.Integer, default=0)
+    locations_succeeded = db.Column(db.Integer, default=0)
+    locations_failed = db.Column(db.Integer, default=0)
+    reviews_received = db.Column(db.Integer, default=0)
+    reviews_created = db.Column(db.Integer, default=0)
+    reviews_updated = db.Column(db.Integer, default=0)
+    reviews_unchanged = db.Column(db.Integer, default=0)
+    rating_only_reviews = db.Column(db.Integer, default=0)
+    duplicates_skipped = db.Column(db.Integer, default=0)
+    analysis_jobs_created = db.Column(db.Integer, default=0)
+    errors = db.Column(db.JSON)
+    started_at = db.Column(db.DateTime(timezone=True))
+    completed_at = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=_now)

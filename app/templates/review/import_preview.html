@@ -1,0 +1,70 @@
+<!-- review/import_preview.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Import Preview</h1>
+  <span class="badge badge-mock">{{ preview.total_rows }} rows found</span>
+</div>
+
+<div class="card">
+  <h3>Detected Column Mapping</h3>
+  <table class="mapping-table">
+    <tr><th>Target Field</th><th>Detected Column</th></tr>
+  {% for target, source in preview.detected_mapping.items() %}
+    <tr><td>{{ target }}</td><td><code>{{ source }}</code></td></tr>
+  {% else %}
+    <tr><td colspan="2">No columns auto-detected. Use custom mapping.</td></tr>
+  {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h3>Sample Rows (first 5)</h3>
+  <div class="table-wrapper">
+  <table class="sample-table">
+    <thead>
+      <tr>
+        {% for h in preview.headers %}
+        <th>{{ h[:20] }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in preview.sample_rows %}
+      <tr>
+        {% for h in preview.headers %}
+        <td>{{ (row.get(h, '') or '')[:50] }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" action="{{ url_for('review.import_reviews') }}">
+  <input type="hidden" name="column_mapping" value='{{ preview.detected_mapping | tojson }}'>
+  <input type="hidden" name="outlet_mapping" value='{}'>
+  <input type="hidden" name="action" value="import">
+  <button type="submit" class="btn btn-primary">Confirm Import</button>
+  <a href="{{ url_for('review.import_reviews') }}" class="btn btn-outline">Cancel</a>
+</form>
+
+<style>
+.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.card { background: #1e1e2e; border: 1px solid #313244; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.card h3 { margin: 0 0 12px; }
+.badge { padding: 2px 10px; border-radius: 12px; font-size: 0.85em; }
+.badge-mock { background: #f9a82533; color: #f9a825; }
+.mapping-table { width: 100%; border-collapse: collapse; }
+.mapping-table td, .mapping-table th { text-align: left; padding: 8px; border-bottom: 1px solid #313244; }
+.mapping-table code { background: #181825; padding: 2px 6px; border-radius: 4px; }
+.table-wrapper { overflow-x: auto; }
+.sample-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+.sample-table th { padding: 8px; background: #313244; color: #a6adc8; white-space: nowrap; }
+.sample-table td { padding: 8px; border-bottom: 1px solid #313244; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 16px; }
+.btn-primary { background: #89b4fa; color: #1e1e2e; }
+.btn-outline { background: transparent; color: #89b4fa; border: 1px solid #89b4fa44; }
+</style>
+{% endblock %}

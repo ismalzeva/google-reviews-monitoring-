@@ -19,6 +19,19 @@ from werkzeug.security import generate_password_hash
 
 app = create_app()
 
+_uri = os.environ.get('DATABASE_URL')
+if _uri:
+    app.config['SQLALCHEMY_DATABASE_URI'] = _uri
+
+# Ensure tables exist for fresh SQLite testing
+with app.app_context():
+    print(f'  DB engine URL:  {db.engine.url}')
+    print(f'  DB file path:   {db.engine.url.database}')
+    db.session.remove()
+    db.drop_all()
+    db.create_all()
+print()
+
 
 def reset_state():
     """Reset test data — fresh Bubur Fay business, owner user, and search."""

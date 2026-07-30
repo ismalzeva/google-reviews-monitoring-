@@ -12,9 +12,12 @@
             <a href="/" class="nav-brand">📊 Reviews Monitor</a>
             {% if current_user.is_authenticated %}
             <div class="nav-links">
+                <a href="/dashboard/" class="nav-link">📊 Dashboard</a>
                 <a href="/discover/" class="nav-link">🔍 Cari Cabang</a>
                 <a href="/discover/candidates" class="nav-link">📋 Kandidat</a>
                 <a href="/discover/audit" class="nav-link">📜 Audit</a>
+                <a href="/review/sources" class="nav-link">📥 Review Sources</a>
+                <a href="/review/list" class="nav-link">⭐ Reviews</a>
                 <span class="nav-user">{{ current_user.display_name }} ({{ current_user.role }})</span>
                 {% if current_user.business %}
                 <span class="nav-tenant">🏢 {{ current_user.business.brand_name }}</span>

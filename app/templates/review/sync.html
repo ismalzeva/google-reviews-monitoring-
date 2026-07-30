@@ -1,0 +1,60 @@
+<!-- review/sync.html -->
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>Review Sync</h1>
+  <span class="badge badge-mock">MOCK MODE</span>
+</div>
+
+<form method="POST" class="sync-form">
+  <div class="card">
+    <h3>Select Source</h3>
+    <select name="source" class="form-select">
+      <option value="mock">Mock Reviews</option>
+      <option value="outscraper_import">Outscraper Import</option>
+      <option value="google_api" disabled>Google Business Profile API (unavailable)</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <h3>Select Outlets</h3>
+    <p class="hint">Choose which monitored outlets to sync</p>
+    {% if outlets %}
+      <div class="outlet-checkboxes">
+      {% for outlet in outlets %}
+        <label class="outlet-item">
+          <input type="checkbox" name="outlet_ids" value="{{ outlet.id }}" checked>
+          <span class="outlet-name">{{ outlet.name }}</span>
+          <span class="outlet-status badge badge-{{ outlet.status }}">{{ outlet.status }}</span>
+        </label>
+      {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state">No active outlets found. <a href="{{ url_for('discovery.search') }}">Discover outlets first</a>.</p>
+    {% endif %}
+  </div>
+
+  <button type="submit" class="btn btn-primary">
+    <i class="fa-regular fa-rotate"></i> Start Sync
+  </button>
+</form>
+
+<style>
+.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.card { background: #1e1e2e; border: 1px solid #313244; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.card h3 { margin: 0 0 12px; font-size: 1em; }
+.hint { color: #a6adc8; font-size: 0.85em; margin-bottom: 12px; }
+.sync-form { max-width: 600px; }
+.form-select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #45475a; background: #181825; color: #cdd6f4; }
+.outlet-checkboxes { display: flex; flex-direction: column; gap: 8px; }
+.outlet-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+.outlet-item:hover { background: #31324433; }
+.outlet-name { flex: 1; }
+.btn { padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer; background: #89b4fa; color: #1e1e2e; font-size: 0.95em; }
+.empty-state { color: #a6adc8; font-size: 0.9em; }
+.badge { padding: 2px 8px; border-radius: 8px; font-size: 0.8em; }
+.badge-old_or_closed { background: #f38ba833; color: #f38ba8; }
+.badge-owner_confirmed { background: #4caf5033; color: #4caf50; }
+.badge-pending { background: #f9a82533; color: #f9a825; }
+</style>
+{% endblock %}
