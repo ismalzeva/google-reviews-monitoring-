@@ -49,6 +49,9 @@ def create_app(config_name=None):
     from app.routes.response import response_bp
     app.register_blueprint(response_bp)
 
+    from app.routes.issue import issue_bp
+    app.register_blueprint(issue_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

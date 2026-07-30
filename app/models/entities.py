@@ -322,9 +322,43 @@ class Issue(db.Model):
     internal_notes = db.Column(db.JSON)
     evidence_attachments = db.Column(db.JSON)
     resolution_summary = db.Column(db.Text)
+    closed_by = db.Column(db.String(36), db.ForeignKey('users.id'))
+    closed_at = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
     resolved_at = db.Column(db.DateTime(timezone=True))
+
+
+# ─── ISSUE PATTERN ───────────────────────────────────────
+class IssuePattern(db.Model):
+    __tablename__ = 'issue_patterns'
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(db.String(36), nullable=False, index=True)
+    business_id = db.Column(db.String(36), db.ForeignKey('businesses.id'), nullable=False)
+    parent_issue_id = db.Column(db.String(36), db.ForeignKey('issues.id'), nullable=True)
+    pattern_key = db.Column(db.String(100), nullable=False)  # e.g. 'wait_time', 'food_quality'
+    title = db.Column(db.String(300))
+    description = db.Column(db.Text)
+    trend = db.Column(db.String(20), default='stable')  # stable, increasing, decreasing
+    outlet_specific = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+# ─── PATTERN REVIEW (supporting reviews) ─────────────────
+class PatternReview(db.Model):
+    __tablename__ = 'pattern_reviews'
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    pattern_id = db.Column(db.String(36), db.ForeignKey('issue_patterns.id'), nullable=False)
+    review_id = db.Column(db.String(36), db.ForeignKey('reviews.id'), nullable=False)
+    issue_id = db.Column(db.String(36), db.ForeignKey('issues.id'), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+
+    __table_args__ = (
+        db.UniqueConstraint('pattern_id', 'review_id', name='uq_pattern_review'),
+    )
 
 
 # ─── PUBSUB EVENT ───────────────────────────────────────
