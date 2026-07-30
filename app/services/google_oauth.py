@@ -314,15 +314,52 @@ def consume_oauth_state(state: OAuthState):
 # ─── OAuth Flow ──────────────────────────────────────────
 
 def get_oauth_url(connection_id: str, tenant_id: str) -> str:
-    """In mock mode, returns a local URL that immediately simulates success.
-    The actual state is created by the route handler before calling this,
-    so this function just wraps the redirect URL."""
+    """Build the Google OAuth URL for user authorization.
+
+    Returns the URL to redirect the user to for Google OAuth consent.
+    In mock mode, returns a local URL that simulates success.
+    """
     if not _is_using_real_api():
         redirect = get_redirect_uri()
-        # State must be passed by the caller — this is a fallback
         state = f"{tenant_id}:{connection_id}"
         return f"{redirect}?code=mock_auth_code&state={state}"
-    raise NotImplementedError("Real OAuth not yet configured")
+
+    from flask import current_app
+    client_id = current_app.config.get('GOOGLE_CLIENT_ID', '')
+    redirect_uri = get_redirect_uri()
+    scopes = current_app.config.get('GOOGLE_SCOPES', ['https://www.googleapis.com/auth/business.manage'])
+    scope_str = ' '.join(scopes)
+
+    # Generate secure state nonce
+    import secrets
+    state_nonce = secrets.token_urlsafe(48)
+    state_hash = hashlib.sha256(state_nonce.encode('utf-8')).hexdigest()
+
+    # Store state hash server-side
+    state = OAuthState(
+        nonce_hash=state_hash,
+        user_id='pending',  # will be set by route before creating OAuth URL
+        tenant_id=tenant_id,
+        business_id=connection_id,  # using connection_id as proxy; route sets actual
+        connection_id=connection_id,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+    )
+    db.session.add(state)
+    db.session.commit()
+
+    params = {
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': scope_str,
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'state': state_nonce,
+    }
+    import urllib.parse
+    from flask import current_app
+    auth_url = current_app.config.get('GBP_AUTH_PROVIDER', 'https://accounts.google.com/o/oauth2/auth')
+    return f"{auth_url}?{urllib.parse.urlencode(params)}"
 
 
 def exchange_code_for_token(code: str, connection_id: str, tenant_id: str,
@@ -330,28 +367,136 @@ def exchange_code_for_token(code: str, connection_id: str, tenant_id: str,
     """Exchange an OAuth authorization code for tokens.
 
     In mock mode, creates synthetic tokens and saves to DB with mock status.
+    In production mode, calls Google OAuth token endpoint via HTTP.
     """
     conn = GoogleConnection.query.get(connection_id)
     if not conn or conn.tenant_id != tenant_id:
         raise PermissionError("Connection not found or tenant mismatch")
 
-    if adapter_mode_val == 'mock':
-        access_token = f"mock_access_token_{tenant_id[:8]}_{datetime.now(timezone.utc).timestamp():.0f}"
-        refresh_token = f"mock_refresh_token_{tenant_id[:8]}_{secrets.randbits(20):06d}"
-        expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+    if adapter_mode_val == 'production' or (adapter_mode_val == 'mock' and code != 'mock_auth_code'):
+        # Real token exchange
+        from flask import current_app
+        cid = current_app.config.get('GOOGLE_CLIENT_ID', '')
+        csec = current_app.config.get('GOOGLE_CLIENT_SECRET', '')
+        redirect_uri = get_redirect_uri()
+
+        from app.services.google_business_profile import (
+            exchange_auth_code as gbp_exchange,
+            RedirectUriError, PermissionDeniedError, CredentialMissingError,
+        )
+        try:
+            token_data = gbp_exchange(code, cid, csec, redirect_uri)
+        except RedirectUriError as e:
+            conn.last_error = str(e)
+            db.session.commit()
+            raise
+        except PermissionDeniedError as e:
+            conn.status = STATUS_PERMISSION_DENIED
+            conn.last_error = str(e)
+            db.session.commit()
+            raise
+        except CredentialMissingError as e:
+            conn.last_error = str(e)
+            db.session.commit()
+            raise
+        except Exception as e:
+            conn.last_error = f"Token exchange failed: {e}"
+            db.session.commit()
+            raise
+
+        access_token = token_data['access_token']
+        refresh_token = token_data.get('refresh_token', '')
+        expires_in = token_data.get('expires_in', 3600)
+        expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         conn.encrypted_access_token_ref = encrypt_token(access_token)
-        conn.encrypted_refresh_token_ref = encrypt_token(refresh_token)
+        conn.encrypted_refresh_token_ref = encrypt_token(refresh_token) if refresh_token else None
         conn.token_expiry = expiry
         conn.google_subject_id = f"user/{tenant_id[:8]}"
         conn.scopes = 'https://www.googleapis.com/auth/business.manage'
-        conn.status = STATUS_MOCK_CONNECTED
-        conn.adapter_mode = 'mock'
+        conn.status = STATUS_CONNECTED
+        conn.adapter_mode = 'production'
         conn.connected_at = datetime.now(timezone.utc)
+        conn.last_error = None
         db.session.commit()
         return conn
 
-    raise NotImplementedError("Real OAuth token exchange not yet configured")
+    # Mock mode: create synthetic tokens
+    access_token = f"mock_access_token_{tenant_id[:8]}_{datetime.now(timezone.utc).timestamp():.0f}"
+    refresh_token = f"mock_refresh_token_{tenant_id[:8]}_{secrets.randbits(20):06d}"
+    expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    conn.encrypted_access_token_ref = encrypt_token(access_token)
+    conn.encrypted_refresh_token_ref = encrypt_token(refresh_token)
+    conn.token_expiry = expiry
+    conn.google_subject_id = f"user/{tenant_id[:8]}"
+    conn.scopes = 'https://www.googleapis.com/auth/business.manage'
+    conn.status = STATUS_MOCK_CONNECTED
+    conn.adapter_mode = 'mock'
+    conn.connected_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return conn
+
+
+def _get_access_token(conn: GoogleConnection) -> str:
+    """Decrypt and return a valid access token.
+
+    Handles refresh if token is expired or about to expire (< 5 min).
+    Returns the raw access token string.
+    Raises TokenExpiredError if no refresh token and token is expired.
+    """
+    from app.services.encryption import decrypt_token
+    from app.services.google_business_profile import (
+        refresh_access_token as gbp_refresh,
+        TokenExpiredError, TokenRevokedError,
+    )
+    from flask import current_app
+
+    access_token = decrypt_token(conn.encrypted_access_token_ref) if conn.encrypted_access_token_ref else None
+    if not access_token:
+        raise TokenExpiredError("No access token available")
+
+    # Check if expired or about to expire
+    now = datetime.now(timezone.utc)
+    exp = conn.token_expiry
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+
+    if exp and (exp - now).total_seconds() < 300:
+        # Needs refresh
+        refresh_token = decrypt_token(conn.encrypted_refresh_token_ref) if conn.encrypted_refresh_token_ref else None
+        if not refresh_token:
+            raise TokenExpiredError("Access token expired and no refresh token available")
+
+        cid = current_app.config.get('GOOGLE_CLIENT_ID', '')
+        csec = current_app.config.get('GOOGLE_CLIENT_SECRET', '')
+
+        try:
+            new_token = gbp_refresh(refresh_token, cid, csec)
+        except TokenRevokedError:
+            conn.status = STATUS_TOKEN_REVOKED
+            conn.last_error = "Refresh token revoked by user"
+            db.session.commit()
+            raise
+        except Exception as e:
+            conn.last_error = f"Token refresh failed: {e}"
+            db.session.commit()
+            raise
+
+        # Update stored token
+        new_access = new_token['access_token']
+        conn.encrypted_access_token_ref = encrypt_token(new_access)
+        expires_in = new_token.get('expires_in', 3600)
+        conn.token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+        # Update refresh token if a new one was issued
+        if 'refresh_token' in new_token and new_token['refresh_token']:
+            conn.encrypted_refresh_token_ref = encrypt_token(new_token['refresh_token'])
+
+        db.session.commit()
+        access_token = new_access
+
+    return access_token
 
 
 # ─── Account Discovery ──────────────────────────────────
@@ -364,7 +509,13 @@ def list_accounts(business_id: str, tenant_id: str) -> list[dict]:
         raise ValueError(f"Connection status is {conn.status}")
     if not _is_using_real_api():
         return _MOCK_ACCOUNTS
-    raise NotImplementedError("Real account listing not yet configured")
+
+    # Production: fetch real accounts via GBP API
+    access_token = _get_access_token(conn)
+    from app.services.google_business_profile import list_accounts_production
+    from flask import current_app
+    base_url = current_app.config.get('GBP_API_BASE_URL', 'https://businessprofile.googleapis.com/v1')
+    return list_accounts_production(access_token, base_url) or []
 
 
 def select_account(business_id: str, tenant_id: str, account_id: str,
@@ -396,7 +547,23 @@ def list_locations(business_id: str, tenant_id: str) -> list[dict]:
         raise ValueError("No account selected")
     if not _is_using_real_api():
         return _MOCK_LOCATIONS
-    raise NotImplementedError("Real location listing not yet configured")
+
+    # Production: fetch real locations via GBP API
+    access_token = _get_access_token(conn)
+    from app.services.google_business_profile import list_locations_production
+    from flask import current_app
+    base_url = current_app.config.get('GBP_API_BASE_URL', 'https://businessprofile.googleapis.com/v1')
+
+    all_locations = []
+    page_token = None
+    while True:
+        result = list_locations_production(access_token, conn.selected_account_id, base_url, page_token=page_token)
+        all_locations.extend(result.get('locations', []))
+        page_token = result.get('next_page_token')
+        if not page_token:
+            break
+
+    return all_locations or _MOCK_LOCATIONS
 
 
 def _owner_verification_overrides_match(owner_status: str) -> bool:

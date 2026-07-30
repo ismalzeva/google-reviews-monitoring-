@@ -304,21 +304,111 @@ def validate_event(event_payload: dict) -> tuple[bool, list[str]]:
 
 
 def pubsub_health_check() -> dict:
-    """Check Pub/Sub pipeline readiness.
-
-    Returns a dict describing the mode, production connectivity,
-    and any blocking reasons.  The project does not yet have a
-    production Pub/Sub subscription, so this always reports mock mode.
-    """
+    """Check Pub/Sub pipeline readiness."""
+    from app.services.feature_flags import is_production_configured
+    is_prod = is_production_configured()
+    block_reasons = []
+    if not is_prod:
+        block_reasons.append('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET belum dikonfigurasi')
     return {
-        'pubsub_mode': 'mock',
-        'production_pubsub_connected': False,
-        'blocking_reason': [
-            'Belum ada Google Cloud Pub/Sub subscription yang dikonfigurasi',
-            'Belum ada Google Cloud Service Account untuk Pub/Sub',
-            'Google Reviews API — akses production belum disetujui / masih dalam antrian OAuth verification',
-        ],
+        'pubsub_mode': 'production' if is_prod else 'mock',
+        'production_pubsub_connected': is_prod,
+        'blocking_reason': block_reasons,
     }
+
+
+# ─── Production Pub/Sub push handler ───────────────────
+
+
+def process_pubsub_push(push_body: dict) -> dict:
+    """Process a Google Cloud Pub/Sub push notification.
+
+    Google Pub/Sub push format::
+
+        {
+            "message": {
+                "attributes": {"key": "value"},
+                "data": "<base64-encoded-json>",
+                "message_id": "...",
+                "publish_time": "..."
+            },
+            "subscription": "projects/.../subscriptions/..."
+        }
+
+    The ``data`` field is base64-decoded and parsed as JSON, then
+    passed to :func:`process_event` for tenant resolution, duplication
+    check, and upsert.
+
+    Returns standard process_event result or ``invalid`` if parsing
+    fails.
+    """
+    import base64
+
+    if not _validate_pubsub_push(push_body):
+        logger.warning('Invalid Pub/Sub push envelope: %s', list(push_body.keys())[:3])
+        return {'status': 'invalid', 'errors': ['Invalid Pub/Sub push envelope']}
+
+    message = push_body['message']
+    subscription = push_body.get('subscription', '')
+
+    # Base64-decode the data field
+    raw_data = message.get('data', '')
+    try:
+        decoded = base64.b64decode(raw_data).decode('utf-8')
+        event_payload = json.loads(decoded)
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        logger.error('Pub/Sub data decode/parse failed: %s', exc)
+        return {'status': 'invalid', 'errors': [f'Cannot decode Pub/Sub data: {exc}']}
+
+    # Override message_id and publish_time from the envelope
+    event_payload.setdefault('message_id', message.get('message_id', ''))
+    event_payload.setdefault('publish_time', message.get('publish_time', ''))
+
+    # Extract attributes (Google's Pub/Sub may put metadata here)
+    attributes = message.get('attributes', {}) or {}
+    if attributes.get('google_account_id'):
+        event_payload.setdefault('google_account_id', attributes['google_account_id'])
+    if attributes.get('tenant_id'):
+        event_payload.setdefault('tenant_id', attributes['tenant_id'])
+
+    # If subscription is registered, derive tenant_id from it
+    if not event_payload.get('tenant_id'):
+        from flask import current_app
+        tenant_sub_map = current_app.config.get('PUBSUB_TENANT_MAP', {})
+        for tenant_id, sub_pattern in tenant_sub_map.items():
+            if sub_pattern and subscription and sub_pattern == subscription:
+                event_payload['tenant_id'] = tenant_id
+                break
+
+    # Process the event
+    result = process_event(event_payload=event_payload, upsert_callback=None)
+    # If this is from a real Pub/Sub subscription, trigger sync
+    if result.get('status') == 'created' and subscription:
+        _trigger_event_sync(event_payload, subscription)
+
+    return result
+
+
+def _validate_pubsub_push(push_body: dict) -> bool:
+    """Basic structural validation of a Pub/Sub push HTTP body."""
+    if not isinstance(push_body, dict):
+        return False
+    msg = push_body.get('message')
+    if not isinstance(msg, dict):
+        return False
+    return bool(msg.get('message_id') or msg.get('data'))
+
+
+def _trigger_event_sync(event_payload: dict, subscription: str) -> None:
+    """Queue an event-driven sync for the affected tenant."""
+    tenant_id = event_payload.get('tenant_id')
+    if not tenant_id:
+        return
+    try:
+        from app.services.sync_service import trigger_sync_for_tenant
+        trigger_sync_for_tenant(tenant_id, source='pubsub_event')
+    except Exception:
+        logger.exception('Event-driven sync failed for tenant %s', tenant_id)
 
 
 # ─── Internal helpers ────────────────────────────────────

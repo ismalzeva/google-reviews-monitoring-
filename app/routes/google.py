@@ -23,7 +23,9 @@ def _get_business():
 
 
 def _adapter_mode() -> str:
-    return 'mock'  # Overridden if real creds exist
+    """Return 'mock' or 'production' based on env config."""
+    from app.services.feature_flags import is_production_mode
+    return 'production' if is_production_mode() else 'mock'
 
 
 # ─── CONNECT ──────────────────────────────────────────────
@@ -68,9 +70,28 @@ def connect():
         callback_url = f"{redirect_url}?code=mock_auth_code&state={state_nonce}"
         return redirect(callback_url)
 
-    # Real OAuth not implemented
-    flash('Google OAuth belum dikonfigurasi. Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.', 'error')
-    return redirect(url_for('google.status'))
+    # Production OAuth: build real Google OAuth URL
+    state_nonce = goog.create_oauth_state(
+        user_id=current_user.id,
+        tenant_id=business.tenant_id,
+        business_id=business.id,
+        connection_id=conn.id,
+        intent='/google/accounts',
+    )
+    from flask import current_app
+    cid = current_app.config.get('GOOGLE_CLIENT_ID')
+    redirect_uri = goog.get_redirect_uri()
+    oauth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth"
+        f"?client_id={cid}"
+        f"&redirect_uri={redirect_uri}"
+        f"&response_type=code"
+        f"&scope=https://www.googleapis.com/auth/business.manage"
+        f"&access_type=offline"
+        f"&prompt=consent"
+        f"&state={state_nonce}"
+    )
+    return redirect(oauth_url)
 
 
 @google_bp.route('/callback')
@@ -415,3 +436,48 @@ def api_status():
             'success': False,
             'errors': [{'code': 'not_connected', 'message': str(e)}],
         }), 200
+
+
+# ─── PUB/SUB WEBHOOK ───────────────────────────────────
+
+
+@google_bp.route('/pubsub-push', methods=['POST'])
+def pubsub_push():
+    """Google Cloud Pub/Sub push subscription endpoint."""
+    from app.services.event_service import process_pubsub_push
+    from flask import current_app
+
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({'status': 'error', 'message': 'Invalid JSON body'}), 400
+
+    # Validate the push via Google JWT
+    authorization = request.headers.get('Authorization', '')
+    is_verified = False
+    if authorization and current_app.config.get('PUBSUB_VERIFY_TOKEN'):
+        import re
+        match = re.match(r'^Bearer\s+(\S+)', authorization)
+        if match:
+            from app.services.google_business_profile import verify_pubsub_token
+            is_verified = verify_pubsub_token(match.group(1)) is not None
+    else:
+        is_verified = True  # fallback for dev/test environments
+
+    if not is_verified and authorization:
+        logger.warning('Pub/Sub push without valid OIDC token')
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    result = process_pubsub_push(body)
+    if result.get('status') == 'invalid':
+        return jsonify(result), 400
+
+    return jsonify(result), 200
+
+
+@google_bp.route('/pubsub-health')
+def pubsub_endpoint_health():
+    """Return Pub/Sub endpoint health status."""
+    from app.services.event_service import pubsub_health_check
+    health = pubsub_health_check()
+    health['endpoint'] = url_for('google.pubsub_push', _external=True)
+    return jsonify(health), 200

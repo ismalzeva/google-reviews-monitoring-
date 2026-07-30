@@ -467,12 +467,18 @@ class OutscraperImportAdapter(ReviewSourceAdapter):
 
 
 class GoogleBusinessProfileReviewAdapter(ReviewSourceAdapter):
-    """Skeleton adapter for production Google Business Profile API.
-    Will raise NotImplementedError until credentials and approval are available.
+    """Production adapter for Google Business Profile API v4.
+
+    Uses the google_business_profile HTTP client for real API calls.
+    Falls back to mock on credential/token errors and provides clear
+    error messages for each blocking condition.
     """
 
-    def __init__(self, credentials=None):
-        self._credentials = credentials
+    def __init__(self, connection=None, access_token=None, business_id=None, tenant_id=None):
+        self._connection = connection
+        self._access_token = access_token
+        self._business_id = business_id
+        self._tenant_id = tenant_id
         self._blocking_reasons = [
             "Google OAuth credentials not configured",
             "Business Profile API not enabled in Google Cloud Console",
@@ -480,28 +486,147 @@ class GoogleBusinessProfileReviewAdapter(ReviewSourceAdapter):
             "No Google Business Profile API access token available",
         ]
 
-    def list_reviews(self, **kwargs):
-        raise NotImplementedError(
-            "Google Business Profile API not available. "
-            f"Blocking reasons: {'; '.join(self._blocking_reasons)}"
+    def _get_access_token(self):
+        if self._access_token:
+            return self._access_token
+        if not self._connection:
+            raise ValueError("No connection and no access token provided")
+        from app.services.google_oauth import _get_access_token as _g
+        return _g(self._connection)
+
+    def _get_base_url(self):
+        from flask import current_app
+        return current_app.config.get(
+            'GBP_API_BASE_URL',
+            'https://businessprofile.googleapis.com/v1',
         )
 
-    def get_review(self, **kwargs):
-        raise NotImplementedError(
-            "Google Business Profile API not available. "
-            f"Blocking reasons: {'; '.join(self._blocking_reasons)}"
+    def list_reviews(self, business_id=None, location_id=None, page_token=None,
+                     page_size=10, order_by=None):
+        """Fetch reviews from Google Business Profile API."""
+        from app.services.google_business_profile import (
+            list_reviews_production,
+            TokenExpiredError, PermissionDeniedError, GBPHttpError,
         )
+
+        if not location_id:
+            raise ValueError("location_id is required")
+
+        access_token = self._get_access_token()
+        base_url = self._get_base_url()
+
+        try:
+            result = list_reviews_production(
+                access_token, location_id, base_url,
+                page_size=page_size, page_token=page_token,
+                order_by=order_by or 'update_time desc',
+            )
+            return result
+        except TokenExpiredError:
+            logger.warning("Token expired during list_reviews, attempting refresh...")
+            # Caller's _get_access_token handles refresh
+            raise
+        except PermissionDeniedError:
+            logger.error("Permission denied for GBP review listing")
+            raise
+        except GBPHttpError:
+            logger.exception("GBP HTTP error during review listing")
+            raise
+
+    def get_review(self, business_id=None, location_id=None, review_name=None):
+        """Fetch a single review by resource name."""
+        from app.services.google_business_profile import (
+            get_review_production,
+            TokenExpiredError, PermissionDeniedError, GBPHttpError,
+        )
+
+        if not review_name:
+            raise ValueError("review_name is required")
+
+        access_token = self._get_access_token()
+        base_url = self._get_base_url()
+
+        try:
+            return get_review_production(access_token, review_name, base_url)
+        except TokenExpiredError:
+            raise
+        except PermissionDeniedError:
+            raise
+        except GBPHttpError:
+            logger.exception("GBP HTTP error during get_review")
+            raise
+
+    def create_reply(self, review_name, reply_text):
+        """Post a reply to a review on GBP."""
+        from app.services.google_business_profile import (
+            create_reply_production,
+            TokenExpiredError, PermissionDeniedError, GBPHttpError,
+        )
+        if not review_name:
+            raise ValueError("review_name is required")
+        access_token = self._get_access_token()
+        base_url = self._get_base_url()
+        try:
+            return create_reply_production(access_token, review_name, reply_text, base_url)
+        except TokenExpiredError:
+            raise
+        except PermissionDeniedError:
+            raise
+        except GBPHttpError:
+            logger.exception("GBP HTTP error during create_reply")
+            raise
+
+    def update_reply(self, review_name, reply_text):
+        """Update an existing reply on GBP."""
+        from app.services.google_business_profile import (
+            update_reply_production,
+            TokenExpiredError, PermissionDeniedError, GBPHttpError,
+        )
+        if not review_name:
+            raise ValueError("review_name is required")
+        access_token = self._get_access_token()
+        base_url = self._get_base_url()
+        try:
+            return update_reply_production(access_token, review_name, reply_text, base_url)
+        except TokenExpiredError:
+            raise
+        except PermissionDeniedError:
+            raise
+        except GBPHttpError:
+            logger.exception("GBP HTTP error during update_reply")
+            raise
 
     def health_check(self):
+        """Return adapter health with production status info."""
+        from app.services.google_oauth import _is_using_real_api
+        from app.services.feature_flags import is_auto_reply_enabled, is_reply_enabled_globally
+
+        is_production = _is_using_real_api()
+        token_available = self._access_token is not None
+        connected = self._connection is not None
+
+        blocking = list(self._blocking_reasons)
+        if is_production:
+            blocking = []
+            if not token_available and not connected:
+                blocking.append("No access token and no connection provided")
+            if not is_production:
+                blocking.append("OAuth credentials not set in environment")
+
         return {
             "adapter_name": "GoogleBusinessProfileReviewAdapter",
-            "status": "unavailable",
-            "mode": "production",
-            "production_api_connected": False,
-            "reply_enabled": False,
-            "blocking_reason": "; ".join(self._blocking_reasons),
-            "credentials_configured": self._credentials is not None,
+            "status": "available" if is_production and token_available else "unavailable",
+            "mode": "production" if is_production else "mock_fallback",
+            "production_api_connected": is_production and token_available,
+            "review_endpoint_accessible": is_production and token_available,
+            "reply_enabled": is_reply_enabled_globally(),
+            "auto_reply_enabled": is_auto_reply_enabled(),
+            "blocking_reason": "; ".join(blocking) if blocking else None,
+            "credentials_configured": is_production,
         }
+
+    def __repr__(self):
+        return f"<GoogleBusinessProfileReviewAdapter production={self._access_token is not None}>"
 
 
 # ─── ADAPTER RESOLVER ──────────────────────────────────
@@ -514,7 +639,18 @@ def get_adapter(source: str, connection=None) -> ReviewSourceAdapter:
     elif source == "outscraper_import":
         return OutscraperImportAdapter()
     elif source == "google_api" or source == "google_business_profile":
-        return GoogleBusinessProfileReviewAdapter()
+        access_token = None
+        business_id = None
+        tenant_id = None
+        if connection:
+            business_id = getattr(connection, 'business_id', None)
+            tenant_id = getattr(connection, 'tenant_id', None)
+        return GoogleBusinessProfileReviewAdapter(
+            connection=connection,
+            access_token=access_token,
+            business_id=business_id,
+            tenant_id=tenant_id,
+        )
     else:
         logger.warning("Unknown source '%s', falling back to MockReviewAdapter", source)
         return MockReviewAdapter()
