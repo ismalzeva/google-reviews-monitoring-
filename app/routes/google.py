@@ -24,8 +24,8 @@ def _get_business():
 
 def _adapter_mode() -> str:
     """Return 'mock' or 'production' based on env config."""
-    from app.services.feature_flags import is_production_mode
-    return 'production' if is_production_mode() else 'mock'
+    from app.services.feature_flags import is_production_configured
+    return 'production' if is_production_configured() else 'mock'
 
 
 # ─── CONNECT ──────────────────────────────────────────────
