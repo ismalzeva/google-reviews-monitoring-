@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+{% block title %}Intelligence Dashboard — Reviews Monitor{% endblock %}
+{% block content %}
+<div class="intelligence-dashboard">
+    {% if business %}
+    <div class="dashboard-header">
+        <h1>🧠 Intelligence Dashboard</h1>
+        <p class="subtitle">{{ business.brand_name }} · Analisis Review</p>
+        <div class="filter-bar">
+            <label>Periode:
+                <select id="period-select" onchange="loadSummary()">
+                    <option value="7">7 Hari</option>
+                    <option value="14">14 Hari</option>
+                    <option value="30" selected>30 Hari</option>
+                    <option value="90">90 Hari</option>
+                </select>
+            </label>
+            <label>Outlet:
+                <select id="outlet-select" onchange="loadSummary(); loadPriority();">
+                    <option value="">Semua Outlet</option>
+                    {% for outlet in outlets %}
+                    <option value="{{ outlet.id }}">{{ outlet.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button class="btn btn-sm btn-primary" onclick="triggerAnalysis()">🔄 Analisis Sekarang</button>
+        </div>
+    </div>
+
+    <div class="data-limitation-banner">
+        ⚠️ Data dibatasi: Google API masih mode mock. Analisis menggunakan model rule-based.
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="stats-grid" id="summary-cards">
+        <div class="stat-card loading">Memuat...</div>
+    </div>
+
+    <!-- Sentiment Breakdown -->
+    <div class="dashboard-row">
+        <div class="card">
+            <h3>📊 Sentimen Review</h3>
+            <div id="sentiment-chart" class="chart-container">
+                <div class="loading">Memuat data sentimen...</div>
+            </div>
+        </div>
+        <div class="card">
+            <h3>⚠️ Urgensi & Risiko</h3>
+            <div id="urgency-summary" class="chart-container">
+                <div class="loading">Memuat data urgensi...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Priority Review Queue -->
+    <div class="card">
+        <div class="card-header">
+            <h2>🚨 Priority Review Queue</h2>
+            <span class="badge badge-danger" id="priority-count">0</span>
+        </div>
+        <div id="priority-queue">
+            <div class="loading">Memuat antrean prioritas...</div>
+        </div>
+    </div>
+
+    <!-- Outlet Comparison -->
+    <div class="card">
+        <div class="card-header">
+            <h2>📋 Perbandingan Outlet</h2>
+        </div>
+        <div id="outlet-comparison">
+            <div class="loading">Memuat perbandingan outlet...</div>
+        </div>
+    </div>
+
+    <!-- Management Summary -->
+    <div class="card">
+        <div class="card-header">
+            <h2>📝 Management Summary</h2>
+        </div>
+        <div id="management-summary">
+            <div class="loading">Memuat ringkasan manajemen...</div>
+        </div>
+    </div>
+    {% else %}
+    <div class="info-box">
+        <h2>Belum Ada Bisnis</h2>
+        <p>Anda belum terhubung dengan bisnis apapun.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadSummary();
+    loadPriority();
+    loadOutletComparison();
+    loadManagementSummary();
+});
+
+function loadSummary() {
+    const days = document.getElementById('period-select')?.value || 30;
+    const outletId = document.getElementById('outlet-select')?.value || '';
+
+    let url = `/api/analysis/summary?days=${days}`;
+    if (outletId) url += `&outlet_id=${outletId}`;
+
+    fetch(url)
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp.success) return;
+            renderSummary(resp.data);
+        })
+        .catch(() => {
+            document.getElementById('summary-cards').innerHTML = '<div class="stat-card error">Gagal memuat data</div>';
+        });
+}
+
+function renderSummary(data) {
+    const container = document.getElementById('summary-cards');
+    if (!data) {
+        container.innerHTML = '<div class="stat-card error">Tidak ada data</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="stat-card">
+            <div class="stat-value">${data.average_rating}</div>
+            <div class="stat-label">Rata-rata Rating</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.total_reviews}</div>
+            <div class="stat-label">Total Review</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.rating_only_reviews}</div>
+            <div class="stat-label">Rating-Only</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.sentiments.positive}</div>
+            <div class="stat-label">Positif</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.sentiments.negative}</div>
+            <div class="stat-label">Negatif</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.sentiments.mixed}</div>
+            <div class="stat-label">Campuran</div>
+        </div>
+        <div class="stat-card urgent">
+            <div class="stat-value">${data.high_urgency_open}</div>
+            <div class="stat-label">Urgensi Tinggi</div>
+        </div>
+        <div class="stat-card critical">
+            <div class="stat-value">${data.critical_open}</div>
+            <div class="stat-label">Kritis</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.unanswered_reviews}</div>
+            <div class="stat-label">Belum Dibalas</div>
+        </div>
+    `;
+
+    // Sentiment chart
+    renderSentimentChart(data.sentiments);
+
+    // Urgency summary
+    renderUrgencySummary(data);
+}
+
+function renderSentimentChart(sentiments) {
+    const container = document.getElementById('sentiment-chart');
+    const total = sentiments.positive + sentiments.negative + sentiments.mixed + sentiments.neutral;
+
+    if (total === 0) {
+        container.innerHTML = '<div class="empty-state">Belum ada analisis sentimen</div>';
+        return;
+    }
+
+    const bars = [
+        { label: 'Positif', value: sentiments.positive, pct: Math.round(sentiments.positive / total * 100), color: '#27ae60' },
+        { label: 'Negatif', value: sentiments.negative, pct: Math.round(sentiments.negative / total * 100), color: '#e74c3c' },
+        { label: 'Campuran', value: sentiments.mixed, pct: Math.round(sentiments.mixed / total * 100), color: '#f39c12' },
+        { label: 'Netral', value: sentiments.neutral, pct: Math.round(sentiments.neutral / total * 100), color: '#7f8c8d' },
+    ];
+
+    container.innerHTML = '<div class="bar-chart">' +
+        bars.filter(b => b.value > 0).map(b => `
+            <div class="bar-item">
+                <div class="bar-label">${b.label}</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: ${b.pct}%; background: ${b.color};"></div>
+                </div>
+                <div class="bar-value">${b.value} (${b.pct}%)</div>
+            </div>
+        `).join('') +
+    '</div>';
+}
+
+function renderUrgencySummary(data) {
+    const container = document.getElementById('urgency-summary');
+    container.innerHTML = `
+        <div class="urgency-grid">
+            <div class="urgency-item severity-low">
+                <div class="urgency-value">${data.total_reviews}</div>
+                <div class="urgency-label">Total Review</div>
+            </div>
+            <div class="urgency-item severity-medium">
+                <div class="urgency-value">${data.high_urgency_open}</div>
+                <div class="urgency-label">Urgensi Tinggi</div>
+            </div>
+            <div class="urgency-item severity-high">
+                <div class="urgency-value">${data.critical_open}</div>
+                <div class="urgency-label">Kritis</div>
+            </div>
+            <div class="urgency-item">
+                <div class="urgency-value">${data.unanswered_reviews}</div>
+                <div class="urgency-label">Belum Dibalas</div>
+            </div>
+        </div>
+    `;
+}
+
+function loadPriority() {
+    const outletId = document.getElementById('outlet-select')?.value || '';
+
+    let url = '/api/analysis/priority?limit=20';
+    if (outletId) url += `&outlet_id=${outletId}`;
+
+    fetch(url)
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp.success) return;
+            renderPriority(resp.data);
+        });
+}
+
+function renderPriority(reviews) {
+    const container = document.getElementById('priority-queue');
+    const countBadge = document.getElementById('priority-count');
+
+    countBadge.textContent = reviews.length;
+
+    if (reviews.length === 0) {
+        container.innerHTML = '<div class="empty-state">✅ Semua review telah dianalisis</div>';
+        return;
+    }
+
+    const urgencyClass = { 'critical': 'badge badge-critical', 'high': 'badge badge-danger', 'medium': 'badge badge-warning', 'low': 'badge badge-info' };
+
+    container.innerHTML = `
+        <table class="priority-table">
+            <thead>
+                <tr>
+                    <th>Outlet</th>
+                    <th>Rating</th>
+                    <th>Review</th>
+                    <th>Sentimen</th>
+                    <th>Urgensi</th>
+                    <th>Risiko</th>
+                    <th>Human Review</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${reviews.map(r => `
+                    <tr class="${r.urgency === 'critical' ? 'row-critical' : r.urgency === 'high' ? 'row-high' : ''}">
+                        <td>${r.outlet}</td>
+                        <td>${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</td>
+                        <td class="comment-cell">${r.comment_preview || '(tanpa teks)'}</td>
+                        <td><span class="badge badge-${r.sentiment}">${r.sentiment}</span></td>
+                        <td><span class="${urgencyClass[r.urgency] || 'badge'}">${r.urgency}</span></td>
+                        <td><span class="badge badge-${r.reputation_risk}">${r.reputation_risk}</span></td>
+                        <td>${r.human_review_required ? '⚠️ Ya' : '✅'}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function loadOutletComparison() {
+    fetch('/api/analysis/outlet-comparison?days=30')
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp.success) return;
+            renderOutletComparison(resp.data);
+        });
+}
+
+function renderOutletComparison(outlets) {
+    const container = document.getElementById('outlet-comparison');
+
+    if (outlets.length === 0) {
+        container.innerHTML = '<div class="empty-state">Belum ada data outlet</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th>Outlet</th>
+                    <th>Rating</th>
+                    <th>Review Baru</th>
+                    <th>Negatif (%)</th>
+                    <th>Urgensi Tinggi</th>
+                    <th>Kritis</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${outlets.map(o => `
+                    <tr class="${o.critical_count > 0 ? 'row-critical' : o.high_urgency_count > 2 ? 'row-warning' : ''}">
+                        <td><strong>${o.outlet_name}</strong></td>
+                        <td>${o.average_rating}</td>
+                        <td>${o.new_reviews}</td>
+                        <td>${o.negative_percentage}%</td>
+                        <td>${o.high_urgency_count}</td>
+                        <td>${o.critical_count}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function loadManagementSummary() {
+    fetch('/api/analysis/management-summary?days=30')
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp.success) return;
+            renderManagementSummary(resp.data);
+        });
+}
+
+function renderManagementSummary(data) {
+    const container = document.getElementById('management-summary');
+
+    if (!data) {
+        container.innerHTML = '<div class="empty-state">Belum ada data</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="management-summary">
+            <div class="summary-block">
+                <h4>📈 Executive Summary</h4>
+                <p>${data.executive_summary}</p>
+            </div>
+            <div class="summary-block">
+                <h4>⭐ Rating</h4>
+                <p>Saat ini: <strong>${data.rating.current}</strong> | Sebelumnya: <strong>${data.rating.previous}</strong> | Perubahan: <span class="${data.rating.change >= 0 ? 'positive-change' : 'negative-change'}">${data.rating.change >= 0 ? '+' : ''}${data.rating.change}</span></p>
+            </div>
+            <div class="summary-grid">
+                <div class="summary-box">
+                    <h4>📊 Review</h4>
+                    <ul>
+                        <li>Total Baru: ${data.reviews.total_new}</li>
+                        <li>Positif: ${data.reviews.positive}</li>
+                        <li>Negatif: ${data.reviews.negative}</li>
+                        <li>Campuran: ${data.reviews.mixed}</li>
+                        <li>Netral: ${data.reviews.neutral}</li>
+                    </ul>
+                </div>
+                <div class="summary-box">
+                    <h4>🎯 Tindakan yang Direkomendasikan</h4>
+                    <ul>
+                        ${data.recommended_management_actions.map(a => `<li>${a}</li>`).join('')}
+                    </ul>
+                </div>
+                <div class="summary-box">
+                    <h4>⚠️ Keterbatasan Data</h4>
+                    <ul>
+                        ${data.data_limitations.map(l => `<li>${l}</li>`).join('')}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function triggerAnalysis() {
+    const btn = document.querySelector('.btn-primary');
+    btn.disabled = true;
+    btn.textContent = '⏳ Menganalisis...';
+
+    fetch('/api/analysis/trigger', { method: 'POST' })
+        .then(r => r.json())
+        .then(resp => {
+            btn.textContent = `✅ ${resp.data?.analyzed || 0} dianalisis`;
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = '🔄 Analisis Sekarang';
+                loadSummary();
+                loadPriority();
+            }, 1500);
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.textContent = '🔄 Analisis Sekarang';
+        });
+}
+</script>
+
+<style>
+.intelligence-dashboard { padding: 1rem 0; }
+.dashboard-header { margin-bottom: 1.5rem; }
+.filter-bar { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
+.filter-bar label { font-size: 0.9rem; }
+.filter-bar select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid #ddd; }
+.data-limitation-banner { background: #fff3cd; border: 1px solid #ffc107; padding: 0.5rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; }
+.dashboard-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.card { background: #fff; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 1rem; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.card-header h2 { margin: 0; font-size: 1.2rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+.stat-card { background: #fff; border-radius: 10px; padding: 1rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.stat-card.loading { color: #999; }
+.stat-card.error { color: #e74c3c; background: #fdf0ef; }
+.stat-value { font-size: 1.8rem; font-weight: 700; color: #2c3e50; }
+.stat-label { font-size: 0.8rem; color: #7f8c8d; margin-top: 0.25rem; }
+.stat-card.urgent .stat-value { color: #e67e22; }
+.stat-card.critical .stat-value { color: #e74c3c; }
+
+.bar-chart { display: flex; flex-direction: column; gap: 0.75rem; }
+.bar-item { display: flex; align-items: center; gap: 0.75rem; }
+.bar-label { min-width: 70px; font-size: 0.85rem; }
+.bar-track { flex: 1; height: 24px; background: #ecf0f1; border-radius: 12px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 12px; transition: width 0.5s; }
+.bar-value { min-width: 80px; font-size: 0.8rem; color: #7f8c8d; }
+
+.urgency-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.urgency-item { text-align: center; padding: 0.75rem; border-radius: 8px; background: #f8f9fa; }
+.urgency-value { font-size: 1.5rem; font-weight: 700; }
+.urgency-label { font-size: 0.8rem; color: #7f8c8d; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; padding: 0.6rem 0.75rem; font-size: 0.8rem; color: #7f8c8d; border-bottom: 2px solid #ecf0f1; }
+td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+.comment-cell { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-critical { background: #fdf0ef; }
+.row-high { background: #fef9e7; }
+.row-warning { background: #fef9e7; }
+
+.badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; }
+.badge-critical { background: #e74c3c; color: #fff; }
+.badge-danger { background: #e67e22; color: #fff; }
+.badge-warning { background: #f39c12; color: #fff; }
+.badge-info { background: #3498db; color: #fff; }
+.badge-positive { background: #27ae60; color: #fff; }
+.badge-negative { background: #e74c3c; color: #fff; }
+.badge-mixed { background: #f39c12; color: #fff; }
+.badge-neutral { background: #7f8c8d; color: #fff; }
+.badge-not_applicable { background: #95a5a6; color: #fff; }
+.badge-minimal { background: #27ae60; color: #fff; }
+.badge-contained { background: #f39c12; color: #fff; }
+.badge-elevated { background: #e67e22; color: #fff; }
+.badge-severe { background: #e74c3c; color: #fff; }
+
+.management-summary { line-height: 1.6; }
+.summary-block { margin-bottom: 1rem; }
+.summary-block h4 { margin: 0 0 0.5rem; }
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.summary-box { background: #f8f9fa; padding: 1rem; border-radius: 8px; }
+.summary-box h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.summary-box ul { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; }
+.summary-box li { margin-bottom: 0.3rem; }
+.positive-change { color: #27ae60; font-weight: 700; }
+.negative-change { color: #e74c3c; font-weight: 700; }
+.loading { text-align: center; padding: 2rem; color: #95a5a6; }
+.empty-state { text-align: center; padding: 2rem; color: #95a5a6; }
+.chart-container { min-height: 150px; }
+
+@media (max-width: 768px) {
+    .dashboard-row { grid-template-columns: 1fr; }
+    .summary-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+{% endblock %}
