@@ -394,10 +394,10 @@ def sync_public_reviews(
                 seen_ids.update(page_ids)
                 for rv in reviews:
                     result["received"] += 1
-                    # Include outlet id so the same place_id on different
-                    # branches never collides (safe cross-branch dedup).
+                    # Provider-prefixed + outlet id so the same place_id on
+                    # different branches never collides (safe cross-branch dedup).
                     source_review_name = (
-                        f"public:{outlet.id}:{place_id}:{rv['source_review_id']}"
+                        f"{source}:{outlet.id}:{place_id}:{rv['source_review_id']}"
                     )
 
                     reviewer_name = rv.get("reviewer_name_masked") or ""

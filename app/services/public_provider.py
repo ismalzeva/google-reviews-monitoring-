@@ -18,7 +18,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-PROVIDERS = ("mock", "outscraper")
+PROVIDERS = ("mock", "outscraper", "apify")
 
 
 def get_public_review_provider() -> str:
@@ -42,6 +42,58 @@ def get_outscraper_api_key() -> str:
             "Tidak ada fallback diam-diam ke mock."
         )
     return key
+
+
+def get_apify_token() -> str:
+    """Return the Apify API token, or raise when missing."""
+    token = os.environ.get("APIFY_API_TOKEN", "").strip()
+    if not token:
+        raise ValueError(
+            "APIFY_API_TOKEN belum diset. "
+            "Set env APIFY_API_TOKEN untuk mode apify. "
+            "Tidak ada fallback diam-diam ke mock."
+        )
+    return token
+
+
+def get_apify_review_actor_id() -> str:
+    return os.environ.get(
+        "APIFY_REVIEW_ACTOR_ID", "compass/google-maps-reviews-scraper"
+    ).strip()
+
+
+def get_apify_discovery_actor_id() -> str:
+    return os.environ.get(
+        "APIFY_DISCOVERY_ACTOR_ID", "compass/crawler-google-places"
+    ).strip()
+
+
+def get_apify_timeout_seconds() -> int:
+    try:
+        return max(1, int(os.environ.get("APIFY_TIMEOUT_SECONDS", "180")))
+    except (TypeError, ValueError):
+        return 180
+
+
+def get_apify_poll_interval_seconds() -> int:
+    try:
+        return max(1, int(os.environ.get("APIFY_POLL_INTERVAL_SECONDS", "3")))
+    except (TypeError, ValueError):
+        return 3
+
+
+def get_apify_max_reviews() -> int:
+    try:
+        return max(1, min(1000, int(os.environ.get("APIFY_MAX_REVIEWS", "100"))))
+    except (TypeError, ValueError):
+        return 100
+
+
+def get_apify_max_places() -> int:
+    try:
+        return max(1, min(100, int(os.environ.get("APIFY_MAX_PLACES", "10"))))
+    except (TypeError, ValueError):
+        return 10
 
 
 def get_public_review_timeout() -> int:
@@ -90,6 +142,18 @@ def build_public_review_adapter(source: str = None):
         from app.adapters.outscraper_public_review_adapter import OutscraperPublicReviewAdapter
         api_key = get_outscraper_api_key()
         return OutscraperPublicReviewAdapter(api_key=api_key)
+
+    if provider == "apify":
+        from app.adapters.apify_public_review_adapter import ApifyPublicReviewAdapter
+        return ApifyPublicReviewAdapter(
+            token=get_apify_token(),
+            review_actor_id=get_apify_review_actor_id(),
+            discovery_actor_id=get_apify_discovery_actor_id(),
+            timeout_seconds=get_apify_timeout_seconds(),
+            poll_interval_seconds=get_apify_poll_interval_seconds(),
+            max_reviews=get_apify_max_reviews(),
+            max_places=get_apify_max_places(),
+        )
 
     raise ValueError(
         f"Public review provider {provider!r} tidak didukung. "
