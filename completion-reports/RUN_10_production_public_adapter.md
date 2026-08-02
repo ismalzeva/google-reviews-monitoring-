@@ -128,11 +128,11 @@ Aturan:
 
 ## Commit Hash
 
-`<commit>` (diisi setelah commit)
+`b48453f` — feat: add RUN_10 production public review adapter
 
 ## Working Tree Status
 
-`<tree>` (diisi setelah commit)
+Clean (git status kosong)
 
 ## Konfirmasi
 
