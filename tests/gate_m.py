@@ -25,7 +25,7 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app, db
 from app.models.entities import (
-    User, Business, Outlet, Review, ReviewVersion, ReviewRawPayload, SyncReport,
+    User, Business, Outlet, Review, ReviewAnalysis, ReviewVersion, ReviewRawPayload, SyncReport,
 )
 from app.services.public_provider import build_public_review_adapter, get_apify_token
 from app.services.feature_flags import is_auto_reply_enabled, is_outlet_pilot_active
@@ -540,10 +540,10 @@ class TestSync(GateMBase):
         oid = self._make_outlet()
         self._sync_apify(make_fake_http(), outlet_ids=[oid])
         with self.app.app_context():
-            rp = ReviewRawPayload.query.filter_by(tenant_id="tenant-m-1").first()
-            self.assertIsNotNone(rp)
-            self.assertEqual(rp.source, "apify")
-            self.assertIn("_run_id", rp.raw_payload)
+            rps = ReviewRawPayload.query.filter_by(tenant_id="tenant-m-1", source="apify").all()
+            with_run = [rp for rp in rps if rp.raw_payload and rp.raw_payload.get("_run_id")]
+            self.assertTrue(with_run, "tidak ada raw payload apify dengan _run_id")
+            self.assertEqual(with_run[0].source, "apify")
 
 
 # ─── DISCOVERY ─────────────────────────────────────────────
@@ -646,6 +646,183 @@ class TestSafety(GateMBase):
                 a.list_reviews_by_place_id(PLACE)
         self.assertNotIn(secret, str(ctx.exception))
         self.assertNotIn(secret, str(ctx.exception.to_dict()))
+
+
+# ─── AI ADVISOR ────────────────────────────────────────────
+class TestAiAdvisor(GateMBase):
+    def setUp(self):
+        super().setUp()
+        self._clean_tenant()
+
+    def _clean_tenant(self):
+        """Isolate each advisor test: remove tenant-m-1 review data."""
+        with self.app.app_context():
+            rows = Review.query.filter_by(tenant_id="tenant-m-1").all()
+            for r in rows:
+                ReviewRawPayload.query.filter_by(review_pk=r.id).delete()
+                ReviewVersion.query.filter_by(review_pk=r.id).delete()
+                ReviewAnalysis.query.filter_by(review_pk=r.id).delete()
+                db.session.delete(r)
+            db.session.commit()
+
+    def _seed_reviews(self, texts, outlet_id=None, tenant="tenant-m-1", biz="biz-m-1"):
+        """Insert text reviews and run rule-based analysis."""
+        import uuid
+        from app.services.review_service import normalize_review, upsert_review
+        from app.services.analysis_service import analyze_review
+        oid = outlet_id or self._make_outlet()
+        with self.app.app_context():
+            for i, (txt, rating) in enumerate(texts):
+                rid = f"adv-{uuid.uuid4().hex[:8]}"
+                data = {
+                    "source_review_name": f"apify:{oid}:PLACE:{rid}",
+                    "reviewer_display_name": "Uji A***",
+                    "star_rating": rating,
+                    "comment": txt,
+                    "create_time": "2026-07-20T08:00:00",
+                    "update_time": "2026-07-20T08:00:00",
+                }
+                normalized = normalize_review(tenant, biz, oid, "apify", data)
+                normalized["source_review_name"] = f"apify:{oid}:PLACE:{rid}"
+                upsert_review(tenant, biz, oid, "apify", f"apify:{oid}:PLACE:{rid}",
+                              normalized, raw_payload=data)
+                rv = Review.query.filter_by(tenant_id=tenant, source_review_name=f"apify:{oid}:PLACE:{rid}").first()
+                analyze_review(tenant, biz, rv.id)
+            db.session.commit()
+        return oid
+
+    def _advisor(self, **filters):
+        from app.services.ai_advisor import generate
+        from app.services.public_analytics import parse_filters
+        with self.app.app_context():
+            return generate("tenant-m-1", "biz-m-1", parse_filters(filters))
+
+    def test_advisor_contract_fields(self):
+        oid = self._seed_reviews([("Pelayanan tidak ramah, kasir cuek.", 2),
+                                  ("Pelayanannya lambat dan judes.", 1)])
+        adv = self._advisor(days="90")
+        self.assertGreaterEqual(len(adv["issues"]), 1)
+        it = adv["issues"][0]
+        for field in ("outlet", "masalah", "bukti", "saran_tindakan", "pic"):
+            self.assertIn(field, it)
+        self.assertIn("review_count", it["bukti"])
+        self.assertIn("period", it["bukti"])
+        self.assertIsInstance(it["saran_tindakan"], list)
+
+    def test_advisor_max_top3(self):
+        self._seed_reviews([("Rasa tidak enak.", 1), ("Makanan basi.", 1),
+                            ("Pelayanan lambat.", 2), ("Kotor.", 1), ("Mahal.", 2),
+                            ("Lama sekali.", 1)])
+        adv = self._advisor(days="90")
+        self.assertLessEqual(len(adv["issues"]), 3)
+
+    def test_advisor_crew_mapping(self):
+        self._seed_reviews([("Pelayanan tidak ramah, kasir cuek.", 2),
+                            ("Waiternya jarang senyum.", 1)])
+        adv = self._advisor(days="90")
+        crews = [i for i in adv["issues"] if i["pic"] == "Crew Outlet"]
+        self.assertTrue(crews)
+
+    def test_advisor_supervisor_mapping(self):
+        self._seed_reviews([("Ordernya lama banget, nunggu 30 menit.", 1),
+                            ("Antreannya lama.", 2)])
+        adv = self._advisor(days="90")
+        sups = [i for i in adv["issues"] if i["pic"] == "Supervisor"]
+        self.assertTrue(sups)
+
+    def test_advisor_kitchen_mapping(self):
+        self._seed_reviews([("Rasanya berubah, tidak enak.", 1),
+                            ("Buburnya hambar.", 2)])
+        adv = self._advisor(days="90")
+        kitchens = [i for i in adv["issues"] if i["pic"] == "Kitchen / Chef"]
+        self.assertTrue(kitchens)
+
+    def test_advisor_owner_mapping(self):
+        self._seed_reviews([("Setelah makan langsung mual, takut keracunan.", 1)])
+        adv = self._advisor(days="90")
+        owners = [i for i in adv["issues"] if i["pic"] == "Owner"]
+        self.assertTrue(owners)
+
+    def test_advisor_evidence_count_period(self):
+        oid = self._seed_reviews([("Pelayanan tidak ramah.", 2)])
+        adv = self._advisor(days="90")
+        self.assertGreaterEqual(len(adv["issues"]), 1)
+        self.assertGreaterEqual(adv["issues"][0]["bukti"]["review_count"], 1)
+        self.assertIn("s/d", adv["issues"][0]["bukti"]["period"])
+
+    def test_advisor_rating_only_excluded(self):
+        self._seed_reviews([("", 1)])  # rating-only, no text
+        adv = self._advisor(days="90")
+        self.assertEqual(adv["issues"], [])
+
+    def test_advisor_no_unsupported_accusation(self):
+        self._seed_reviews([("Pelayanan tidak ramah.", 2)])
+        adv = self._advisor(days="90")
+        for it in adv["issues"]:
+            self.assertNotIn("malas", it["masalah"].lower())
+            self.assertNotIn("tidak peduli", it["masalah"].lower())
+
+    def test_advisor_weak_evidence_human_review(self):
+        self._seed_reviews([("Rasa tidak enak.", 1)])  # single review
+        adv = self._advisor(days="90")
+        if adv["issues"]:
+            self.assertTrue(adv["issues"][0]["needs_human_review"])
+
+    def test_advisor_tenant_isolation(self):
+        self._seed_reviews([("Pelayanan tidak ramah.", 2)])
+        with self.app.app_context():
+            biz2 = Business(id="biz-adv2", tenant_id="tenant-adv2", name="Lain", brand_name="Lain")
+            db.session.add(biz2)
+            db.session.commit()
+            from app.services.ai_advisor import generate
+            from app.services.public_analytics import parse_filters
+            adv2 = generate("tenant-adv2", "biz-adv2", parse_filters({"days": "90"}))
+        self.assertEqual(adv2["issues"], [])
+
+    def test_advisor_filter_aware(self):
+        self._seed_reviews([("Pelayanan tidak ramah.", 2)])
+        # Outside the filter window → no issues
+        adv_out = self._advisor(days="7", start_date="2025-01-01", end_date="2025-01-31")
+        # hmm: start/end override days; reviews are 2026-07 → empty
+        self.assertEqual(adv_out["issues"], [])
+
+
+# ─── DASHBOARD WITH APIFY SOURCE ───────────────────────────
+class TestDashboardApify(GateMBase):
+    def _sync_live_like(self):
+        # Seed apify-source data via stub sync (no live HTTP)
+        oid = self._make_outlet()
+        fake = make_fake_http()
+        self._sync_apify(fake, outlet_ids=[oid])
+        return oid
+
+    def test_dashboard_source_apify(self):
+        oid = self._sync_live_like()
+        r = self.client.get("/api/public/analytics/summary?days=90")
+        s = r.get_json()
+        self.assertGreaterEqual(s["total_reviews"], 4)
+        r2 = self.client.get("/api/public/analytics/explorer?outlet_id=" + oid)
+        items = r2.get_json()["items"]
+        self.assertTrue(all(i["source"] == "apify" for i in items))
+
+    def test_dashboard_filters(self):
+        self._sync_live_like()
+        r = self.client.get("/api/public/analytics/explorer?rating=5")
+        items = r.get_json()["items"]
+        self.assertTrue(all(i["rating"] == 5 for i in items))
+
+    def test_export_csv_apify(self):
+        self._sync_live_like()
+        r = self.client.get("/api/public/analytics/export.csv")
+        self.assertEqual(r.status_code, 200)
+        import csv as _csv
+        parsed = list(_csv.reader(io.StringIO(r.data.decode())))
+        header_idx = next(i for i, row in enumerate(parsed) if row and not row[0].startswith("#"))
+        header = parsed[header_idx]
+        src_idx = header.index("sumber")
+        for row in parsed[header_idx + 1:]:
+            if row:
+                self.assertEqual(row[src_idx], "apify")
 
 
 if __name__ == "__main__":

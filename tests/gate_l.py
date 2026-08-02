@@ -207,7 +207,7 @@ class TestLiveConfig(GateLBase):
 
     def test_provider_validation(self):
         with self.assertRaises(ValueError):
-            build_public_review_adapter("apify")  # not implemented yet
+            build_public_review_adapter("selenium")  # not implemented/unknown
 
     def test_secret_redaction_in_errors(self):
         # Vendor error must never leak the API key

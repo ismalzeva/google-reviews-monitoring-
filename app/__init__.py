@@ -14,6 +14,13 @@ login_manager = LoginManager()
 
 def create_app(config_name=None):
     app = Flask(__name__)
+    # Templates live in BOTH app/templates (original) and repo-root templates/
+    # (RUN_11 additions like advisor.html). Load both, app/templates first.
+    from jinja2 import ChoiceLoader, FileSystemLoader
+    app.jinja_loader = ChoiceLoader([
+        FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates')),
+        FileSystemLoader(os.path.join(os.path.dirname(__file__), '..', 'templates')),
+    ])
 
     # Load config
     if config_name == 'testing':

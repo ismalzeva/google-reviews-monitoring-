@@ -58,6 +58,14 @@ def intelligence():
     )
 
 
+@bp.route('/advisor')
+@login_required
+def advisor_page():
+    """AI Advisor UI panel — 'Prioritas Perbaikan Hari Ini'."""
+    business = current_user.business
+    return render_template('dashboard/advisor.html', business=business)
+
+
 # ─── API: SUMMARY ──────────────────────────────────────
 
 

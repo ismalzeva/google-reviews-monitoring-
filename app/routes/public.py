@@ -13,7 +13,7 @@ import io
 import logging
 import re
 
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request, Response, render_template
 from flask_login import login_required, current_user
 
 from app import db
@@ -418,6 +418,19 @@ def analytics_priority():
     if err:
         return err
     data = public_analytics.priority_insights(business.tenant_id, business.id, _filters())
+    return jsonify(data)
+
+
+# ─── AI ADVISOR (§9–§12) ───────────────────────────────────
+@bp.route("/advisor")
+@login_required
+def advisor():
+    """AI Advisor — top customer experience issues (max 3, filter-aware)."""
+    business, err = _require_business()
+    if err:
+        return err
+    from app.services.ai_advisor import generate
+    data = generate(business.tenant_id, business.id, _filters())
     return jsonify(data)
 
 

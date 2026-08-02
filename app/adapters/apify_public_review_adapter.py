@@ -286,8 +286,8 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
             "latitude": lat,
             "longitude": lng,
             "province": None,
-            "city_regency": None,
-            "district": None,
+            "city_regency": item.get("city"),
+            "district": item.get("neighborhood"),
             "business_rating": _safe_float(item.get("totalScore")),
             "business_review_count": _safe_int(item.get("reviewsCount")),
             "maps_url": (
@@ -308,7 +308,8 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
             "reviewsSort": "newest",
         }
         if since:
-            input_body["reviewsStartDate"] = since  # requires reviewsSort=newest
+            # Actor expects absolute date YYYY-MM-DD (ISO with timezone → HTTP 400)
+            input_body["reviewsStartDate"] = str(since)[:10]
         run = self._run_actor(self.review_actor_id, input_body)
         dataset_id = run.get("defaultDatasetId")
         if not dataset_id:
@@ -372,8 +373,8 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
             "business_rating": _safe_float(item.get("totalScore")),
             "business_review_count": _safe_int(item.get("reviewsCount")),
             "province": None,
-            "city_regency": None,
-            "district": None,
+            "city_regency": item.get("city"),
+            "district": item.get("neighborhood"),
             "source": self.source_name,
         }
 
@@ -421,6 +422,9 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
                 ),
                 "rating": _safe_float(item.get("totalScore")),
                 "review_count": _safe_int(item.get("reviewsCount")),
+                "province": None,
+                "city_regency": item.get("city"),
+                "district": item.get("neighborhood"),
                 "source": self.source_name,
             })
         return results

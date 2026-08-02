@@ -17,6 +17,11 @@ from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Pin to SQLite — NEVER touch the live grm_db (Postgres) from tests
+os.environ['DATABASE_URL'] = f"sqlite:///{tempfile.mktemp(suffix='gate_d.db')}"
+os.environ['SECRET_KEY'] = 'test-secret'
+os.environ['FLASK_ENV'] = 'testing'
+
 import pytest
 from app import create_app, db as _db
 from app.models.entities import (

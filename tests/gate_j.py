@@ -24,6 +24,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mktemp(suffix='gate_j.db')}"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["FLASK_ENV"] = "testing"
 os.environ["GRM_PILOT_MODE"] = "false"
+os.environ["PUBLIC_REVIEW_PROVIDER"] = "mock"  # pin provider for deterministic tests
 
 from werkzeug.security import generate_password_hash
 

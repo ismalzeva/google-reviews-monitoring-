@@ -49,10 +49,15 @@ Tests:
   I45  - Priority limit max 100
 """
 
-import os, sys, json, uuid
+import os, sys, json, uuid, tempfile
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Pin to SQLite — NEVER touch the live grm_db (Postgres) from tests
+os.environ['DATABASE_URL'] = f"sqlite:///{tempfile.mktemp(suffix='gate_i.db')}"
+os.environ['SECRET_KEY'] = 'test-secret'
+os.environ['FLASK_ENV'] = 'testing'
 
 from app import create_app, db
 from app.models.entities import (User, Business, Outlet, Review,

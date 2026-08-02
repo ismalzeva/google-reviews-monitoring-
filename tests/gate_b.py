@@ -7,6 +7,7 @@ Last line: print('ALL GATES PASSED') or raises AssertionError.
 
 import sys
 import os
+import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app import create_app
@@ -17,11 +18,15 @@ from app.models.entities import (
 from app.services.discovery import search_places, normalize_candidate, save_candidates
 from werkzeug.security import generate_password_hash
 
-app = create_app()
+# Pin to SQLite — NEVER touch the live grm_db (Postgres) from tests.
+# This gate previously read DATABASE_URL from env and silently used the
+# live Postgres DB, dropping all pilot data on every test run.
+if not os.environ.get('DATABASE_URL'):
+    os.environ['DATABASE_URL'] = f"sqlite:///{tempfile.mktemp(suffix='gate_b.db')}"
+os.environ.setdefault('SECRET_KEY', 'test-secret')
+os.environ.setdefault('FLASK_ENV', 'testing')
 
-_uri = os.environ.get('DATABASE_URL')
-if _uri:
-    app.config['SQLALCHEMY_DATABASE_URI'] = _uri
+app = create_app()
 
 # Ensure tables exist for fresh SQLite testing
 with app.app_context():
