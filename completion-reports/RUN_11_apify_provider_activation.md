@@ -114,11 +114,11 @@ Env baru (`.env.example`, tanpa secret):
 
 ## Commit Hash
 
-`<commit>` (diisi setelah commit)
+`d9f739e` — feat: add Apify public review provider for RUN_11
 
 ## Working Tree Status
 
-`<tree>` (diisi setelah commit)
+Clean (git status kosong)
 
 ## Konfirmasi
 
