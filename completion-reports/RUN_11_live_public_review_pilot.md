@@ -102,11 +102,11 @@ Kontrak: RUN_11 directive + `GRM_PUBLIC_MONITORING_SKILL.md`
 
 ## Commit Hash
 
-`<commit>` (diisi setelah commit)
+`2b5556f` — feat: validate RUN_11 live public review pilot
 
 ## Working Tree Status
 
-`<tree>` (diisi setelah commit)
+Clean (git status kosong)
 
 ## Konfirmasi
 
