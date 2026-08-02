@@ -82,10 +82,18 @@ def enrich_location(obj, commit: bool = True) -> bool:
 
     province, city_regency, district = reverse_geocode(obj.latitude, obj.longitude)
 
-    resolved = bool(province and city_regency and district)
-    obj.province = province or "unknown"
-    obj.city_regency = city_regency or "unknown"
-    obj.district = district or "unknown"
+    # Never overwrite already-resolved values (e.g. provider-supplied city).
+    if not obj.province:
+        obj.province = province or "unknown"
+    if not obj.city_regency:
+        obj.city_regency = city_regency or "unknown"
+    if not obj.district:
+        obj.district = district or "unknown"
+    resolved = bool(
+        obj.province != "unknown"
+        and obj.city_regency != "unknown"
+        and obj.district != "unknown"
+    )
     obj.needs_geographic_resolution = not resolved
     if commit:
         db.session.commit()

@@ -241,6 +241,11 @@ class OutscraperPublicReviewAdapter(PublicReviewSourceAdapter):
         limit: int = 100,
         **kwargs,
     ) -> list[dict]:
+        """List one page of public reviews for a Google place.
+
+        Single-page semantics: the caller drives pagination via ``offset``.
+        ``limit`` caps the returned items; ``offset`` selects the page window.
+        """
         collected_at = _utc_now().isoformat()
         sort = kwargs.get("sort") or "newest"
         offset = int(kwargs.get("offset") or 0)
@@ -248,64 +253,56 @@ class OutscraperPublicReviewAdapter(PublicReviewSourceAdapter):
         max_reviews = self.max_reviews or 0
         since_dt = _parse_iso_aware(since)
 
+        data = self._request(
+            {
+                "query": place_id,
+                "limit": page_size,
+                "offset": offset,
+                "sort": sort,
+                "reviewsType": "only_reviews",
+                "language": "id",
+            }
+        )
+        place = self._first_place(data)
+        reviews = (place or {}).get("reviews_data") or []
+
         items = []
-        while True:
-            data = self._request(
+        for rv in reviews:
+            review_date = _iso_from_timestamp(
+                rv.get("review_datetime_utc") or rv.get("review_timestamp")
+            )
+            review_dt = _parse_iso_aware(review_date)
+            if since_dt and review_dt and review_dt < since_dt:
+                continue
+            owner_date = _iso_from_timestamp(
+                rv.get("owner_answer_datetime_utc") or rv.get("owner_answer_timestamp")
+            )
+            raw_rid = rv.get("review_id") or rv.get("id") or ""
+            rid = raw_rid or _deterministic_review_id(place_id, rv)
+            items.append(
                 {
-                    "query": place_id,
-                    "limit": page_size,
-                    "offset": offset,
-                    "sort": sort,
-                    "reviewsType": "only_reviews",
-                    "language": "id",
+                    "source_review_id": rid,
+                    "rating": _safe_int(rv.get("review_rating"), default=3),
+                    "review_text": rv.get("review_text") or "",
+                    "review_date": review_date,
+                    "review_datetime_raw": str(
+                        rv.get("review_datetime_utc")
+                        or rv.get("review_timestamp")
+                        or ""
+                    ),
+                    "owner_reply_text": rv.get("owner_answer"),
+                    "owner_reply_date": owner_date,
+                    "source": self.source_name,
+                    "source_url": f"https://www.google.com/maps/contrib/{rid}" if rid else None,
+                    "reviewer_name_masked": _mask_name(
+                        rv.get("author_title") or rv.get("author_name")
+                    ),
+                    "raw_payload": {**rv, "_collected_at": collected_at, "_provider": self.source_name},
                 }
             )
-            place = self._first_place(data)
-            reviews = (place or {}).get("reviews_data") or []
-            if not reviews:
+            if max_reviews and len(items) >= max_reviews:
                 break
 
-            for rv in reviews:
-                review_date = _iso_from_timestamp(
-                    rv.get("review_datetime_utc") or rv.get("review_timestamp")
-                )
-                review_dt = _parse_iso_aware(review_date)
-                if since_dt and review_dt and review_dt < since_dt:
-                    continue
-                owner_date = _iso_from_timestamp(
-                    rv.get("owner_answer_datetime_utc") or rv.get("owner_answer_timestamp")
-                )
-                raw_rid = rv.get("review_id") or rv.get("id") or ""
-                rid = raw_rid or _deterministic_review_id(place_id, rv)
-                items.append(
-                    {
-                        "source_review_id": rid,
-                        "rating": _safe_int(rv.get("review_rating"), default=3),
-                        "review_text": rv.get("review_text") or "",
-                        "review_date": review_date,
-                        "review_datetime_raw": str(
-                            rv.get("review_datetime_utc")
-                            or rv.get("review_timestamp")
-                            or ""
-                        ),
-                        "owner_reply_text": rv.get("owner_answer"),
-                        "owner_reply_date": owner_date,
-                        "source": self.source_name,
-                        "source_url": f"https://www.google.com/maps/contrib/{rid}" if rid else None,
-                        "reviewer_name_masked": _mask_name(
-                            rv.get("author_title") or rv.get("author_name")
-                        ),
-                        "raw_payload": {**rv, "_collected_at": collected_at, "_provider": self.source_name},
-                    }
-                )
-                if max_reviews and len(items) >= max_reviews:
-                    return items
-
-            if len(reviews) < page_size:
-                break
-            offset += page_size
-
-        items.sort(key=lambda x: x["review_date"] or "", reverse=True)
         return items[:limit] if limit > 0 else items
 
 

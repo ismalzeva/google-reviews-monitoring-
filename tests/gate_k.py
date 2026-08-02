@@ -321,9 +321,16 @@ class TestAdapterContract(GateKBase):
         a = OutscraperPublicReviewAdapter(api_key="k", max_retries=0, page_size=100)
         fake = make_fake_get(reviews=many)
         with mock.patch("app.adapters.outscraper_public_review_adapter.requests.get", fake):
-            items = a.list_reviews_by_place_id(PLACE, limit=0)  # unlimited
+            items = []
+            offset = 0
+            while True:
+                page = a.list_reviews_by_place_id(PLACE, limit=100, offset=offset)
+                items.extend(page)
+                if len(page) < 100:
+                    break
+                offset += 100
         self.assertEqual(len(items), 240)
-        self.assertGreater(fake.calls["n"], 2)  # multiple pages fetched
+        self.assertEqual(fake.calls["n"], 3)  # exactly three pages
 
     def test_incremental_since_filter(self):
         a = OutscraperPublicReviewAdapter(api_key="k", max_retries=0)
