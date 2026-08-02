@@ -86,6 +86,19 @@ Aturan:
 - Gate J: PASS (43/43)
 - Gate K: PASS (32/32)
 
+## Verification Closure (2026-08-02)
+
+- Gate J: 43 tests, OK, exit 0, 6.9s (run terpisah non-interaktif)
+- Gate K: 32 tests, OK, exit 0, 5.3s (run terpisah non-interaktif)
+- Full regression B–K: **ALL PASS**, runner exit 0, total 44s
+- Runner mode: serial bash script non-interaktif, `timeout 300 venv/bin/python tests/<gate>.py`, mencatat nama gate + passed/failed count + exit code + durasi; gagal keseluruhan jika ada gate nonzero
+- Exit codes: B=0 C=0 D=0 E=0 F=0 G=0 H8=0 I=0 J=0 K=0
+- Durations (s): B=2 C=2 D=0 E=2 F=2 G=1 H8=20 I=2 J=7 K=6 → total 44s
+- TTY/process issue: **exit 143 (SIGTERM) sebelumnya** berasal dari kill manual proses regression yang hang akibat infinite loop di `sync_public_reviews` (MockPublicReviewAdapter mengabaikan offset → selalu return page yang sama); **tcsetattr: Inappropriate ioctl** adalah artefak shell wrapper Hermes (`bash -lic` dengan PTY), bukan test runner
+- Root cause: (a) infinite-loop bug di sync (fixed); (b) wrapper shell Hermes memakai interactive login + PTY
+- Resolution: infinite-loop guard `seen_ids` ditambahkan di `sync_public_reviews` (no-progress → break); semua gate dijalankan non-interaktif tanpa TTY → bersih exit 0
+- Final verification status: **VERIFIED** — seluruh Gate B–K hijau, working tree clean, tidak ada secret ter-commit
+
 ## Export Metadata Status
 
 - ✅ CSV: baris `# key: value` (rentang_waktu, kota_kabupaten, kecamatan, cabang, kategori, rating, sentimen, urgensi, sumber, generated_at) sebelum header
