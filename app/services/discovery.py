@@ -350,6 +350,15 @@ def _ensure_outlet(candidate: LocationCandidate):
         existing.address = candidate.formatted_address
         existing.latitude = candidate.latitude
         existing.longitude = candidate.longitude
+        existing.maps_url = candidate.google_maps_uri or existing.maps_url
+        existing.business_rating = candidate.rating or existing.business_rating
+        existing.business_review_count = candidate.review_count or existing.business_review_count
+        if candidate.province and not existing.province:
+            existing.province = candidate.province
+        if candidate.city_regency and not existing.city_regency:
+            existing.city_regency = candidate.city_regency
+        if candidate.district and not existing.district:
+            existing.district = candidate.district
         existing.owner_verification_status = "owner_confirmed"
         existing.monitor_enabled = True
     else:
@@ -362,6 +371,13 @@ def _ensure_outlet(candidate: LocationCandidate):
             latitude=candidate.latitude,
             longitude=candidate.longitude,
             public_place_id=candidate.place_id,
+            maps_url=candidate.google_maps_uri,
+            business_rating=candidate.rating,
+            business_review_count=candidate.review_count,
+            province=candidate.province,
+            city_regency=candidate.city_regency,
+            district=candidate.district,
+            needs_geographic_resolution=candidate.needs_geographic_resolution,
             owner_verification_status="owner_confirmed",
             gbp_match_status="unmatched",
             monitor_enabled=True,

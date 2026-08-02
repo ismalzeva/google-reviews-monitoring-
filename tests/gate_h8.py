@@ -160,7 +160,12 @@ class TestFeatureFlags(unittest.TestCase):
 
     def test_pilot_outlet_limit_default_1(self):
         from app.services.feature_flags import pilot_max_outlets
-        self.assertEqual(pilot_max_outlets(), 1)
+        saved = os.environ.pop('GRM_PILOT_MAX_OUTLETS', None)
+        try:
+            self.assertEqual(pilot_max_outlets(), 1)
+        finally:
+            if saved is not None:
+                os.environ['GRM_PILOT_MAX_OUTLETS'] = saved
 
 
 class TestGoogleOAuthProduction(unittest.TestCase):
