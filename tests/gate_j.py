@@ -371,9 +371,11 @@ class TestPublicMonitoring(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("text/csv", r.content_type)
         lines = r.data.decode().splitlines()
-        self.assertGreaterEqual(len(lines), 3)  # header + rows
-        self.assertIn("kota_kabupaten", lines[0])
-        self.assertIn("sumber", lines[0])
+        data_lines = [l for l in lines if l and not l.startswith("#")]
+        self.assertGreaterEqual(len(data_lines), 3)  # header + rows
+        self.assertIn("kota_kabupaten", data_lines[0])
+        self.assertIn("sumber", data_lines[0])
+        self.assertTrue(any(l.startswith("# generated_at:") for l in lines))
 
     def test_export_xlsx(self):
         r = self.client.get("/api/public/analytics/export.xlsx")
@@ -383,8 +385,9 @@ class TestPublicMonitoring(unittest.TestCase):
 
     def test_export_respects_filters(self):
         r = self.client.get("/api/public/analytics/export.csv?rating=5")
-        lines = r.data.decode().splitlines()[1:]
-        self.assertTrue(all(line.split(",")[4] == "5" for line in lines if line))
+        lines = [l for l in r.data.decode().splitlines() if l and not l.startswith("#")]
+        rows = lines[1:]  # skip header
+        self.assertTrue(all(line.split(",")[4] == "5" for line in rows if line))
 
 
 if __name__ == "__main__":

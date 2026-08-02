@@ -267,25 +267,28 @@ def sync_public_reviews(
     outlet_ids: list = None,
     source: str = None,
     adapter=None,
+    full_sync: bool = False,
 ) -> dict:
     """Public-mode review sync using a :class:`PublicReviewSourceAdapter`.
 
     Unlike :func:`sync_reviews`, this path requires **no Google OAuth** and no
     ``gbp_location_id``: it sources reviews from a public adapter
-    (mock/outscraper/apify/playwright) keyed by the outlet's ``public_place_id``.
+    (mock/outscraper) keyed by the outlet's ``public_place_id``.
 
     Contract (GRM_PUBLIC_MONITORING_SKILL §5, §13, §14):
     - Every record carries provenance (``source`` = adapter label).
+    - Provider selection from runtime config; NO silent fallback to mock.
     - Vendor failure → outlet marked failed, no fabricated reviews, other
-      outlets unaffected (rollback per outlet).
-    - Location metadata (rating, review count, maps URL) refreshed from the
-      public source; geographic fields enriched when missing.
+      outlets unaffected (rollback per outlet), previous data retained.
+    - Incremental sync: ``since`` = newest review date already stored.
+    - Pagination via adapter offset.
+    - Location metadata refreshed; geographic fields enriched when missing.
     - ``old_or_closed`` outlets are skipped.
     """
-    from app.adapters.mock_public_review_adapter import MockPublicReviewAdapter
+    from app.services.public_provider import build_public_review_adapter
 
     if adapter is None:
-        adapter = MockPublicReviewAdapter()
+        adapter = build_public_review_adapter(source)
     if source is None:
         source = adapter.source_name
 
@@ -350,56 +353,93 @@ def sync_public_reviews(
                     outlet.latitude = loc.get("latitude")
                 if loc.get("longitude"):
                     outlet.longitude = loc.get("longitude")
+                # Provider may supply geographic fields directly
+                if loc.get("province") and not outlet.province:
+                    outlet.province = loc["province"]
+                if loc.get("city_regency") and not outlet.city_regency:
+                    outlet.city_regency = loc["city_regency"]
+                if loc.get("district") and not outlet.district:
+                    outlet.district = loc["district"]
                 if not (outlet.province and outlet.city_regency and outlet.district):
                     from app.services.geo_service import enrich_location
                     enrich_location(outlet, commit=False)
                 db.session.add(outlet)
 
-            # 2) Fetch + upsert public reviews
-            reviews = adapter.list_reviews_by_place_id(place_id)
-            for rv in reviews:
-                result["received"] += 1
-                source_review_name = f"public:{place_id}:{rv['source_review_id']}"
-
-                reviewer_name = rv.get("reviewer_name_masked") or ""
-                review_data = {
-                    "source_review_name": source_review_name,
-                    "reviewer_display_name": reviewer_name,
-                    "reviewer_is_anonymous": reviewer_name in ("", "Anonim"),
-                    "star_rating": rv.get("rating"),
-                    "comment": rv.get("review_text") or "",
-                    "create_time": rv.get("review_date"),
-                    "update_time": rv.get("review_date"),
-                    "owner_reply_text": rv.get("owner_reply_text"),
-                    "owner_reply_date": rv.get("owner_reply_date"),
-                    "source_url": rv.get("source_url"),
-                }
-                normalized = normalize_review(
-                    tenant_id, business_id, outlet.id, source, review_data
+            # 2) Fetch + upsert public reviews (incremental + paginated)
+            # Incremental: only fetch reviews newer than the newest stored one.
+            # full_sync=True disables the since filter (full refresh).
+            since = None
+            if not full_sync:
+                newest = (
+                    Review.query.filter_by(tenant_id=tenant_id, outlet_id=outlet.id)
+                    .order_by(Review.create_time.desc())
+                    .first()
                 )
-                normalized["source_review_name"] = source_review_name
+                if newest and newest.create_time:
+                    since = newest.create_time.isoformat()
 
-                if not normalized["has_text"]:
-                    result["rating_only"] += 1
-
-                upsert_result = upsert_review(
-                    tenant_id=tenant_id,
-                    business_id=business_id,
-                    outlet_id=outlet.id,
-                    source=source,
-                    source_review_name=source_review_name,
-                    normalized=normalized,
-                    raw_payload=rv,
+            offset = 0
+            seen_ids = set()
+            while True:
+                reviews = adapter.list_reviews_by_place_id(
+                    place_id, since=since, limit=100, offset=offset
                 )
-                status = upsert_result.get("status", "unchanged")
-                if status == "created":
-                    result["created"] += 1
-                elif status == "updated":
-                    result["updated"] += 1
-                elif status == "unchanged":
-                    result["unchanged"] += 1
-                elif status == "duplicate":
-                    result["duplicates"] += 1
+                if not reviews:
+                    break
+                # No-progress guard: some adapters (mock) ignore offset and
+                # always return the same page — stop instead of looping forever.
+                page_ids = {rv["source_review_id"] for rv in reviews}
+                if page_ids and page_ids.issubset(seen_ids):
+                    break
+                seen_ids.update(page_ids)
+                for rv in reviews:
+                    result["received"] += 1
+                    # Include outlet id so the same place_id on different
+                    # branches never collides (safe cross-branch dedup).
+                    source_review_name = (
+                        f"public:{outlet.id}:{place_id}:{rv['source_review_id']}"
+                    )
+
+                    reviewer_name = rv.get("reviewer_name_masked") or ""
+                    review_data = {
+                        "source_review_name": source_review_name,
+                        "reviewer_display_name": reviewer_name,
+                        "reviewer_is_anonymous": reviewer_name in ("", "Anonim"),
+                        "star_rating": rv.get("rating"),
+                        "comment": rv.get("review_text") or "",
+                        "create_time": rv.get("review_date"),
+                        "update_time": rv.get("review_date"),
+                        "owner_reply_text": rv.get("owner_reply_text"),
+                        "owner_reply_date": rv.get("owner_reply_date"),
+                        "source_url": rv.get("source_url"),
+                    }
+                    normalized = normalize_review(
+                        tenant_id, business_id, outlet.id, source, review_data
+                    )
+                    normalized["source_review_name"] = source_review_name
+
+                    if not normalized["has_text"]:
+                        result["rating_only"] += 1
+
+                    upsert_result = upsert_review(
+                        tenant_id=tenant_id,
+                        business_id=business_id,
+                        outlet_id=outlet.id,
+                        source=source,
+                        source_review_name=source_review_name,
+                        normalized=normalized,
+                        raw_payload=rv.get("raw_payload") or rv,
+                    )
+                    status = upsert_result.get("status", "unchanged")
+                    if status == "created":
+                        result["created"] += 1
+                    elif status == "updated":
+                        result["updated"] += 1
+                    elif status == "unchanged":
+                        result["unchanged"] += 1
+                    elif status == "duplicate":
+                        result["duplicates"] += 1
+                offset += len(reviews)
 
             db.session.commit()
             report.reviews_received += result["received"]
@@ -415,7 +455,13 @@ def sync_public_reviews(
             report.locations_failed += 1
             if not report.errors:
                 report.errors = []
-            report.errors.append({"outlet": outlet.name, "error": str(exc)})
+            report.errors.append(
+                {
+                    "outlet": outlet.name,
+                    "error": str(exc),
+                    "provider": source,
+                }
+            )
 
     report.completed_at = _now()
     db.session.add(report)
@@ -465,17 +511,22 @@ def sync_public_reviews(
 
     return {
         "report_id": report.id,
+        "provider": source,
+        "sync_status": "ok" if report.locations_failed == 0 else "partial_failure",
         "source": source,
         "locations_requested": report.locations_requested,
         "locations_succeeded": report.locations_succeeded,
         "locations_failed": report.locations_failed,
         "reviews_received": report.reviews_received,
+        "reviews_inserted": report.reviews_created,
         "reviews_created": report.reviews_created,
         "reviews_updated": report.reviews_updated,
+        "reviews_skipped": report.reviews_unchanged + report.duplicates_skipped,
         "reviews_unchanged": report.reviews_unchanged,
         "rating_only_reviews": report.rating_only_reviews,
         "duplicates_skipped": report.duplicates_skipped,
-        "errors": report.errors,
+        "error_summary": report.errors or [],
+        "errors": report.errors or [],
         "started_at": report.started_at.isoformat() if report.started_at else None,
         "completed_at": report.completed_at.isoformat() if report.completed_at else None,
     }

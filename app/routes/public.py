@@ -266,10 +266,33 @@ def sync():
 @bp.route("/locations", methods=["GET"])
 @login_required
 def locations():
-    """List public-monitored outlets for the tenant with geographic fields."""
+    """List public-monitored outlets for the tenant with geographic fields.
+
+    Includes provider/sync status per outlet (no raw secrets or sensitive
+    vendor errors).
+    """
     business = _get_business()
     if not business:
         return jsonify({"error": "No business bound to account"}), 400
+
+    from app.models.entities import SyncReport
+    from app.services.public_provider import get_public_review_provider
+
+    try:
+        provider = get_public_review_provider()
+    except ValueError:
+        provider = "unknown"
+
+    last_reports = {}
+    reports = (
+        SyncReport.query.filter_by(tenant_id=business.tenant_id)
+        .order_by(SyncReport.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    for r in reports:
+        if r.business_id not in last_reports:
+            last_reports[r.business_id] = r
 
     outlets = (
         Outlet.query.filter_by(tenant_id=business.tenant_id)
@@ -278,6 +301,7 @@ def locations():
     )
     payload = []
     for o in outlets:
+        report = last_reports.get(o.business_id)
         payload.append(
             {
                 "id": o.id,
@@ -292,12 +316,23 @@ def locations():
                 "business_rating": o.business_rating,
                 "business_review_count": o.business_review_count,
                 "source": o.source,
+                "provider": report.source if report else provider,
+                "last_sync": report.completed_at.isoformat() if report and report.completed_at else None,
+                "sync_status": (
+                    "ok" if report and report.locations_failed == 0 else
+                    ("partial_failure" if report and report.locations_failed else
+                     ("never" if not report else "error"))
+                ),
+                "reviews_inserted": report.reviews_created if report else 0,
+                "reviews_updated": report.reviews_updated if report else 0,
+                "reviews_skipped": (report.reviews_unchanged + report.duplicates_skipped) if report else 0,
+                "error_count": len(report.errors) if report and report.errors else 0,
                 "status": o.status,
                 "monitor_enabled": o.monitor_enabled,
                 "needs_geographic_resolution": o.needs_geographic_resolution,
             }
         )
-    return jsonify({"outlets": payload})
+    return jsonify({"outlets": payload, "configured_provider": provider})
 
 
 # ─── ANALYTICS ─────────────────────────────────────────────
@@ -392,6 +427,27 @@ def _export_filename(ext: str) -> str:
     return f"grm_public_reviews_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
 
 
+def _export_metadata(f: dict) -> dict:
+    """Filter metadata recorded on every export (skill §12)."""
+    from datetime import datetime
+    start = f.get("start")
+    end = f.get("end")
+    return {
+        "rentang_waktu": (
+            f"{start.date().isoformat()} — {end.date().isoformat()}" if start and end else "auto (30 hari)"
+        ),
+        "kota_kabupaten": f.get("city") or "semua",
+        "kecamatan": f.get("district") or "semua",
+        "cabang": ",".join(f["outlet_ids"]) if f.get("outlet_ids") else "semua",
+        "kategori": f.get("category") or "semua",
+        "rating": ",".join(str(r) for r in f["ratings"]) if f.get("ratings") else "semua",
+        "sentimen": f.get("sentiment") or "semua",
+        "urgensi": f.get("urgency") or "semua",
+        "sumber": f.get("source") or "semua",
+        "generated_at": datetime.now().isoformat(),
+    }
+
+
 @bp.route("/analytics/export.csv")
 @login_required
 def export_csv():
@@ -401,6 +457,8 @@ def export_csv():
     f = _filters()
     rows = public_analytics.export_rows(business.tenant_id, business.id, f)
     buf = io.StringIO()
+    for k, v in _export_metadata(f).items():
+        buf.write(f"# {k}: {v}\n")
     writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else ["tanggal"])
     writer.writeheader()
     for r in rows:
@@ -426,8 +484,13 @@ def export_xlsx():
     f = _filters()
     rows = public_analytics.export_rows(business.tenant_id, business.id, f)
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Public Reviews"
+    # Sheet 1 — Export Info (filter metadata)
+    ws_info = wb.active
+    ws_info.title = "Export Info"
+    for k, v in _export_metadata(f).items():
+        ws_info.append([k, v])
+    # Sheet 2 — data
+    ws = wb.create_sheet("Public Reviews")
     headers = list(rows[0].keys()) if rows else ["tanggal"]
     ws.append(headers)
     for r in rows:
