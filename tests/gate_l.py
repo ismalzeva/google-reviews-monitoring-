@@ -24,7 +24,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mktemp(suffix='gate_l.db')}"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["FLASK_ENV"] = "testing"
 os.environ["GRM_PILOT_MODE"] = "true"
-os.environ["GRM_PILOT_MAX_OUTLETS"] = "3"
+os.environ["GRM_PILOT_MAX_OUTLETS"] = "1"
 os.environ["PUBLIC_REVIEW_PROVIDER"] = "mock"
 os.environ.pop("OUTSCRAPER_API_KEY", None)
 
@@ -231,8 +231,29 @@ class TestLiveConfig(GateLBase):
 # ─── PILOT RESTRICTIONS ────────────────────────────────────
 class TestPilotRestrictions(GateLBase):
     def test_pilot_outlet_restriction(self):
-        self.assertGreaterEqual(pilot_max_outlets(), 1)
-        self.assertLessEqual(pilot_max_outlets(), 3)
+        self.assertEqual(pilot_max_outlets(), 1)
+        self.assertLessEqual(pilot_max_outlets(), 1)
+
+    def test_pilot_second_outlet_rejected(self):
+        """With GRM_PILOT_MAX_OUTLETS=1, a second active outlet is rejected."""
+        with self.app.app_context():
+            biz = Business(id="biz-po", tenant_id="tenant-po", name="Pilot Only", brand_name="Pilot Only")
+            db.session.add(biz)
+            db.session.commit()
+            o1 = Outlet(id="po-1", tenant_id="tenant-po", business_id="biz-po",
+                        name="Outlet Satu", public_place_id="P1", status="active",
+                        monitor_enabled=True, reply_enabled=False)
+            db.session.add(o1)
+            db.session.commit()
+            self.assertTrue(is_outlet_pilot_active(o1))  # first active outlet OK
+            # Second active outlet arrives → rejected (limit 1)
+            o2 = Outlet(id="po-2", tenant_id="tenant-po", business_id="biz-po",
+                        name="Outlet Dua", public_place_id="P2", status="active",
+                        monitor_enabled=True, reply_enabled=False)
+            db.session.add(o2)
+            db.session.commit()
+            self.assertFalse(is_outlet_pilot_active(o2))  # limit 1 reached
+            self.assertTrue(is_outlet_pilot_active(o1))  # first still active
 
     def test_harjamukti_exclusion(self):
         with self.app.app_context():
@@ -418,6 +439,27 @@ class TestSafety(GateLBase):
 
     def test_auto_reply_off(self):
         self.assertFalse(is_auto_reply_enabled())
+
+    def test_restart_guide_no_broad_pkill(self):
+        from pathlib import Path
+        doc = (Path(__file__).resolve().parents[1] / "docs" / "OUTSCRAPER_KEY_OWNER_ACTION.md").read_text()
+        # No executable pkill command line (mentions of "pkill" as a *warning*
+        # are fine, but the guide must not teach/run it)
+        pkill_cmds = [l for l in doc.splitlines() if l.strip().startswith("pkill")]
+        self.assertEqual(pkill_cmds, [])
+        self.assertIn("run/grm.pid", doc)
+        self.assertIn("kill -TERM", doc)
+        self.assertIn("venv/bin/python run.py", doc)
+
+    def test_provider_remains_mock_without_key(self):
+        """Provider stays mock while OUTSCRAPER_API_KEY is unavailable."""
+        os.environ.pop("OUTSCRAPER_API_KEY", None)
+        os.environ["PUBLIC_REVIEW_PROVIDER"] = "mock"
+        try:
+            a = build_public_review_adapter()
+            self.assertEqual(type(a).__name__, "MockPublicReviewAdapter")
+        finally:
+            os.environ.pop("OUTSCRAPER_API_KEY", None)
 
 
 if __name__ == "__main__":

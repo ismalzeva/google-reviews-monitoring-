@@ -24,8 +24,12 @@ Diperbarui: 2026-08-02
       ```
 - [ ] 5. Pastikan `.env` TIDAK tracked: `git ls-files | grep '^\.env$'` → kosong
 - [ ] 6. Cek env aman: `PUBLIC_REVIEW_TIMEOUT=30`, `PUBLIC_REVIEW_MAX_RETRIES=3`,
-      `PUBLIC_REVIEW_PAGE_SIZE=50`, `PUBLIC_REVIEW_MAX_REVIEWS=100` (initial pull 50–100)
-- [ ] 7. Restart app: `kill <pid>; cd /home/ubuntu/google-reviews-monitoring && venv/bin/python run.py &`
+      `PUBLIC_REVIEW_PAGE_SIZE=50`, `PUBLIC_REVIEW_MAX_REVIEWS=100` (initial pull 50–100),
+      `GRM_PILOT_MAX_OUTLETS=1` (pilot live maksimal SATU outlet aktif; runtime
+      menolak outlet kedua — dinaikkan hanya via keputusan RUN berikutnya)
+- [ ] 7. Restart app: gunakan prosedur PID-specific di
+      `docs/OUTSCRAPER_KEY_OWNER_ACTION.md` langkah 4 (run/grm.pid, verifikasi
+      PID, SIGTERM, health check) — JANGAN `pkill` generik
 - [ ] 8. Verifikasi: `curl -s http://127.0.0.1:8083/api/public/locations` (login dulu)
       → `configured_provider` harus `outscraper`
 - [ ] 8a. **Rollback ke mock**: untuk kembali tanpa live, set

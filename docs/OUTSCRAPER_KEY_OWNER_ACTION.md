@@ -57,21 +57,52 @@ PY
 Output harus `OUTSCRAPER_API_KEY configured: True`. Script ini hanya memeriksa
 keberadaan, TIDAK mencetak nilai.
 
-## 4. Restart Aplikasi
+## 4. Restart Aplikasi (aman — PID-specific, TANPA broad pkill)
 
 Deployment aktual: **tanpa systemd** — app GRM dijalankan via `venv/bin/python run.py`
-pada port 8083 (background). Restart:
+pada port 8083. PID disimpan di `run/grm.pid` (folder `run/` sudah di-.gitignore).
+Sebelum stop, PID diverifikasi benar-benar menjalankan repo GRM. JANGAN pakai
+`pkill -f run.py` generik (bisa menghentikan proses Python lain).
 
 ```bash
 cd /home/ubuntu/google-reviews-monitoring
-pkill -f "venv/bin/python run.py" || true
-sleep 1
+mkdir -p run
+
+# START (pertama kali / setelah rollback):
 nohup venv/bin/python run.py > /tmp/grm-app.log 2>&1 &
+echo $! > run/grm.pid
+
+# RESTART aman:
+if [ -f run/grm.pid ]; then
+  PID=$(cat run/grm.pid)
+  # Verifikasi PID benar-benar proses GRM (cmdline harus venv/bin/python run.py)
+  if ps -p "$PID" -o cmd= 2>/dev/null | grep -q "venv/bin/python run.py"; then
+    kill -TERM "$PID"
+    for i in $(seq 1 10); do
+      kill -0 "$PID" 2>/dev/null || break
+      sleep 1
+    done
+    kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null || true
+    echo "stopped $PID"
+  else
+    echo "PID $PID bukan proses GRM — tidak di-stop"
+  fi
+fi
+
+nohup venv/bin/python run.py > /tmp/grm-app.log 2>&1 &
+echo $! > run/grm.pid
 sleep 3
-curl -s -o /dev/null -w "health: %{http_code}\n" http://127.0.0.1:8083/health
+
+# Health check port 8083
+if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8083/health | grep -q 200; then
+  echo "health OK"
+else
+  echo "health FAILED — rollback ke mock, lihat langkah 6"
+fi
 ```
 
-Health harus `200`. (Pastikan hanya satu instance; `pgrep -f "run.py"`)
+Catatan: jangan menjalankan dua instance; cek `pgrep -af "venv/bin/python run.py"`
+harus maksimal satu baris (tanpa wrapper bash).
 
 ## 5. Verifikasi Provider Aktif
 
@@ -84,11 +115,12 @@ Login via UI/API, lalu:
 cd /home/ubuntu/google-reviews-monitoring
 # ubah PUBLIC_REVIEW_PROVIDER=mock di .env (komentar baris outscraper/key)
 sed -i 's/^PUBLIC_REVIEW_PROVIDER=outscraper/PUBLIC_REVIEW_PROVIDER=mock/' .env
-# lalu restart (langkah 4)
+# lalu restart aman dengan PID file (langkah 4)
 ```
 
 Provider mock TIDAK membaca API key. Tidak ada silent fallback — perubahan
-provider selalu eksplisit + restart.
+provider selalu eksplisit + restart. Jika health check gagal setelah aktivasi,
+rollback ini adalah langkah pemulihan pertama.
 
 ## Setelah Key Terpasang
 

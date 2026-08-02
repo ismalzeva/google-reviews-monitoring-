@@ -79,7 +79,27 @@ def is_outlet_pilot_active(outlet) -> bool:
     if whitelist:
         return outlet.id in whitelist or outlet.name in whitelist
 
-    return outlet.monitor_enabled
+    if not outlet.monitor_enabled:
+        return False
+
+    # Pilot: enforce maximum active outlets (safety hardening).
+    # Keep the oldest active pilot outlets up to the limit; reject the rest.
+    # Harjamukti excluded. Limit raised only via a RUN decision.
+    max_outlets = pilot_max_outlets()
+    active_all = (
+        Outlet.query.filter(
+            Outlet.tenant_id == outlet.tenant_id,
+            Outlet.monitor_enabled == True,  # noqa: E712
+            Outlet.status != 'old_or_closed',
+        )
+        .filter(~Outlet.name.ilike('%harjamukti%'))
+        .order_by(Outlet.created_at.asc())
+        .all()
+    )
+    if len(active_all) > max_outlets:
+        keep_ids = {o.id for o in active_all[:max_outlets]}
+        return outlet.id in keep_ids
+    return True
 
 
 def rollback_available() -> dict:
