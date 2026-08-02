@@ -4,7 +4,8 @@ Status: BLOCKED — `OUTSCRAPER_API_KEY` belum tersedia
 Diperbarui: 2026-08-02
 
 > Jangan klaim live sebelum semua item di bawah selesai. Jangan pernah
-> menaruh API key di repository / log / completion report.
+> menaruh API key di chat, source code, completion report, log, atau git.
+> Log dan error WAJIB meredaksi secret.
 
 ## Prasyarat Akun
 
@@ -23,10 +24,14 @@ Diperbarui: 2026-08-02
       ```
 - [ ] 5. Pastikan `.env` TIDAK tracked: `git ls-files | grep '^\.env$'` → kosong
 - [ ] 6. Cek env aman: `PUBLIC_REVIEW_TIMEOUT=30`, `PUBLIC_REVIEW_MAX_RETRIES=3`,
-      `PUBLIC_REVIEW_PAGE_SIZE=100`, `PUBLIC_REVIEW_MAX_REVIEWS=100` (batasi initial pull)
+      `PUBLIC_REVIEW_PAGE_SIZE=50`, `PUBLIC_REVIEW_MAX_REVIEWS=100` (initial pull 50–100)
 - [ ] 7. Restart app: `kill <pid>; cd /home/ubuntu/google-reviews-monitoring && venv/bin/python run.py &`
 - [ ] 8. Verifikasi: `curl -s http://127.0.0.1:8083/api/public/locations` (login dulu)
       → `configured_provider` harus `outscraper`
+- [ ] 8a. **Rollback ke mock**: untuk kembali tanpa live, set
+      `PUBLIC_REVIEW_PROVIDER=mock` di `.env` lalu restart. Provider mock TIDAK
+      membaca API key. Tidak ada silent fallback — perubahan provider harus
+      eksplisit via env + restart.
 
 ## Pilot (Bubur Fay — Depok)
 
@@ -39,6 +44,12 @@ Diperbarui: 2026-08-02
       - Place ID: `ChIJ0-depok-margonda-001`
       - Kota/Kabupaten: Depok (Jawa Barat)
       - Kecamatan: ditentukan via geo enrichment / provider
+      > ⚠️ `ChIJ0-depok-margonda-001` adalah **CONTOH/placeholder dari dataset
+      > mock** — BUKAN Place ID asli yang terverifikasi. Sebelum live sync:
+      > lakukan public discovery nyata (`POST /api/public/discover`), dapatkan
+      > Maps URL + Place ID asli dari hasil discovery, lalu cocokkan
+      > nama, alamat, kota/kabupaten, dan rating terhadap Google Maps.
+      > JANGAN live sync jika identitas lokasi belum terverifikasi.
 
 ## Live Collection
 
@@ -70,7 +81,8 @@ Diperbarui: 2026-08-02
       received/inserted/updated/skipped/failed, duration, pages, redacted error) —
       di completion report, TANPA secret
 - [ ] 27. Jangan commit raw response live ke repo; raw payload hanya di DB
-      (ReviewRawPayload) tanpa API key/header
+      (ReviewRawPayload) tanpa API key/header. Log, error, dan completion
+      report WAJIB meredaksi secret (tidak pernah menampilkan nilai key).
 
 ## Selesai
 
