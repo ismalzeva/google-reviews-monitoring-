@@ -7,9 +7,9 @@
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px">
   <label class="grm-caption">Periode:</label>
   <select id="period" onchange="loadAll()" class="grm-input" style="width:auto;padding:7px 10px">
-    <option value="all">Seluruh Waktu</option>
+    <option value="all" selected>Seluruh Waktu</option>
     <option value="7">7 hari</option>
-    <option value="30" selected>30 hari</option>
+    <option value="30">30 hari</option>
     <option value="90">90 hari</option>
   </select>
   <span id="status" class="grm-caption"></span>
@@ -40,9 +40,11 @@
 
 <script>
 let outletsCache = [];
+let currentPeriodLabel = 'Seluruh Waktu';
 
 function periodQs() {
   const v = document.getElementById('period').value;
+  currentPeriodLabel = v === 'all' ? 'Seluruh Waktu' : v + ' hari terakhir';
   return v === 'all' ? 'start_date=2000-01-01' : 'days=' + v;
 }
 
@@ -57,7 +59,7 @@ async function loadAll() {
   renderOutlets(o);
   renderCities(c);
   fillCompareSelects();
-  status.textContent = 'diperbarui ' + new Date().toLocaleTimeString('id-ID');
+  status.textContent = 'Periode: ' + currentPeriodLabel + ' · diperbarui ' + new Date().toLocaleTimeString('id-ID');
 }
 
 function renderOutlets(d) {

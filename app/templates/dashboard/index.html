@@ -34,7 +34,7 @@
     </div>
     <div style="display:flex;gap:24px;font-size:13px">
       <div><div style="font-weight:800;font-size:20px">{{ outlets[0].rating or '—' }}</div><div class="grm-caption">Rating</div></div>
-      <div><div style="font-weight:800;font-size:20px">{{ outlets[0].review_count or stats.reviews }}</div><div class="grm-caption">Review</div></div>
+      <div><div style="font-weight:800;font-size:20px">{{ outlets[0].review_count or stats.reviews }}</div><div class="grm-caption">Review di Google</div></div>
       <div><div style="font-weight:800;font-size:20px;color:var(--grm-primary)">{{ new_this_week }}</div><div class="grm-caption">Baru minggu ini</div></div>
       <div><div style="font-weight:800;font-size:14px;padding-top:6px">{{ outlets[0].last_sync and outlets[0].last_sync[:10] or 'belum' }}</div><div class="grm-caption">Sync terakhir</div></div>
     </div>
