@@ -68,7 +68,7 @@
     {% if results %}
     <div class="info">Ditemukan {{ result_count }} hasil untuk <strong>{{ query }}</strong></div>
     {% for r in results %}
-    <a href="/demo?q={{ r.display_name|urlencode }}&place_id={{ r.place_id|urlencode }}" class="result-card" style="display:flex;color:var(--grm-ink);text-decoration:none">
+    <a href="/preview?q={{ r.display_name|urlencode }}&place_id={{ r.place_id|urlencode }}" class="result-card" style="display:flex;color:var(--grm-ink);text-decoration:none">
       <div class="icon">{{ (r.display_name or '?')[0] }}</div>
       <div class="info">
         <div class="name">{{ r.display_name }}</div>

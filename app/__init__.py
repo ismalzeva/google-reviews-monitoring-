@@ -74,6 +74,9 @@ def create_app(config_name=None):
     from app.routes.public_search import bp as public_search_bp
     app.register_blueprint(public_search_bp)
 
+    from app.routes.public_preview import bp as public_preview_bp
+    app.register_blueprint(public_preview_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

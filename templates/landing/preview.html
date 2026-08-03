@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if preview %}{{ preview.display_name }} — {% endif %}Preview Analisis — GRM</title>
+  <style>
+    :root { --grm-primary:#ff7a00; --grm-primary-dark:#ea6d00; --grm-ink:#111827; --grm-muted:#6b7280; --grm-bg:#faf9f7; --grm-line:#ece9e4; --grm-surface:#fff; --grm-success:#16a34a; --grm-warning:#ea580c; --grm-danger:#dc2626; --grm-blur:rgba(17,24,39,.04); --grm-blue:#2563eb; --grm-radius:14px; --grm-card-bg:#fff }
+    * { box-sizing:border-box } body { margin:0; font-family:'Inter',system-ui,sans-serif; background:var(--grm-bg); color:var(--grm-ink); line-height:1.55 }
+    a { color:var(--grm-primary); text-decoration:none }
+    /* Nav */
+    .pub-header { position:sticky; top:0; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--grm-line); z-index:20 }
+    .pub-nav { max-width:1080px; margin:0 auto; padding:14px 20px; display:flex; align-items:center; gap:24px }
+    .pub-logo { font-weight:800; font-size:19px; color:var(--grm-ink) } .pub-logo span { color:var(--grm-primary) }
+    .pub-menu { display:flex; gap:18px; flex:1; overflow-x:auto } .pub-menu a { color:var(--grm-muted); font-size:14px; white-space:nowrap } .pub-menu a:hover { color:var(--grm-primary) }
+    .pub-actions { display:flex; gap:10px; flex-shrink:0 } .pub-link { color:var(--grm-ink); font-size:14px } .pub-btn { background:var(--grm-primary); color:#fff; padding:9px 18px; border-radius:8px; font-weight:600; font-size:14px; white-space:nowrap } .pub-btn:hover { background:var(--grm-primary-dark); color:#fff }
+    .pub-secondary { background:var(--grm-bg); color:var(--grm-ink); border:1px solid var(--grm-line); padding:8px 16px; border-radius:8px; font-size:14px; font-weight:600; white-space:nowrap; cursor:pointer }
+    /* Wrap */
+    .wrap { max-width:720px; margin:0 auto; padding:48px 20px }
+    .error-card { background:#fef2f2; border:1px solid #fecaca; border-radius:var(--grm-radius); padding:18px 20px; color:#991b1b; font-size:14px; margin-bottom:24px; line-height:1.6 }
+    /* Header */
+    .preview-header { background:var(--grm-card-bg); border:1px solid var(--grm-line); border-radius:var(--grm-radius); padding:28px 28px 20px; margin-bottom:16px }
+    .preview-header h1 { font-size:26px; font-weight:800; margin:0 0 6px } .preview-header .addr { color:var(--grm-muted); font-size:14px; margin-bottom:18px }
+    .preview-meta { display:flex; align-items:center; gap:20px; flex-wrap:wrap }
+    .rating-ring { display:flex; align-items:center; gap:10px; flex-shrink:0 }
+    .rating-big { font-size:42px; font-weight:800; color:var(--grm-success); line-height:1 }
+    .rating-stars { color:#f59e0b; font-size:18px; letter-spacing:2px }
+    .review-label { font-size:13px; color:var(--grm-muted) }
+    .branch-select { flex:1; min-width:200px }
+    .branch-select select { width:100%; padding:10px 12px; border:1px solid var(--grm-line); border-radius:8px; font-size:14px; background:var(--grm-bg); font-family:inherit; color:var(--grm-ink); cursor:pointer }
+    /* Cards */
+    .preview-card { background:var(--grm-card-bg); border:1px solid var(--grm-line); border-radius:var(--grm-radius); padding:24px 28px; margin-bottom:16px }
+    .preview-card h2 { font-size:18px; font-weight:700; margin:0 0 16px }
+    /* Distribution */
+    .distro-bar { display:flex; align-items:center; gap:10px; margin-bottom:10px; height:26px }
+    .distro-label { width:32px; font-size:13px; font-weight:600; text-align:right; flex-shrink:0; color:var(--grm-muted) }
+    .distro-fill-wrap { flex:1; background:var(--grm-bg); border-radius:6px; height:22px; overflow:hidden }
+    .distro-fill { height:100%; border-radius:6px; transition:width .6s ease }
+    .distro-count { width:42px; font-size:13px; color:var(--grm-muted); text-align:right; flex-shrink:0 }
+    /* Issues */
+    .issue-row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--grm-bg) }
+    .issue-row:last-child { border-bottom:0 }
+    .issue-count { background:var(--grm-bg); border-radius:8px; padding:6px 12px; font-size:14px; font-weight:700; min-width:42px; text-align:center; flex-shrink:0 }
+    .issue-title { flex:1; font-size:15px }
+    .issue-cat { background:var(--grm-bg); border-radius:6px; padding:4px 10px; font-size:12px; color:var(--grm-muted); flex-shrink:0 }
+    /* AI teaser */
+    .ai-header { display:flex; align-items:center; gap:10px; margin-bottom:10px }
+    .ai-badge { background:linear-gradient(135deg,#ff7a00,#ff9500); color:#fff; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700 }
+    .teaser-item { display:flex; align-items:center; gap:10px; padding:14px 0; border-bottom:1px solid var(--grm-bg) }
+    .teaser-item.locked { filter:blur(4px); opacity:.35; user-select:none; pointer-events:none; border-color:transparent }
+    .teaser-icon { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0 }
+    .teaser-icon.visible { background:#ecfdf5; color:#059669 }
+    .teaser-lock { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; background:var(--grm-bg); color:var(--grm-muted) }
+    .lock-banner { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--grm-muted); padding-top:8px }
+    /* CTAs */
+    .cta-section { background:linear-gradient(135deg,#fff7ed,#ffedd5); border:1px solid #ffd6a5; border-radius:var(--grm-radius); padding:28px 28px 24px; text-align:center; margin-top:8px }
+    .cta-section h3 { font-size:20px; font-weight:800; margin:0 0 6px } .cta-section p { color:var(--grm-muted); font-size:14px; margin:0 0 18px }
+    .cta-primary { display:inline-block; background:var(--grm-primary); color:#fff; padding:13px 28px; border-radius:10px; font-weight:700; font-size:16px; margin-bottom:8px } .cta-primary:hover { background:var(--grm-primary-dark); color:#fff }
+    .cta-secondary { display:inline-block; color:var(--grm-muted); font-size:14px; margin-top:6px }
+    /* Trust */
+    .trust-row { display:flex; align-items:center; gap:6px; justify-content:center; color:var(--grm-muted); font-size:12px; padding-top:16px }
+    /* Empty / error states */
+    .empty-state { text-align:center; padding:56px 20px }
+    .empty-state .icon { font-size:48px; margin-bottom:16px }
+    .empty-state h2 { font-size:22px; margin-bottom:8px } .empty-state p { color:var(--grm-muted); font-size:15px; max-width:400px; margin:0 auto 20px }
+    /* Footer */
+    .pub-footer { border-top:1px solid var(--grm-line); background:var(--grm-bg) } .pub-foot-inner { max-width:1080px; margin:0 auto; padding:32px 20px; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:20px; font-size:14px; color:var(--grm-muted) } .pub-foot-inner a { color:var(--grm-muted); margin:0 4px }
+    @media(max-width:640px) { .preview-header h1 { font-size:20px } .preview-meta { flex-direction:column; align-items:flex-start } .branch-select { width:100% } }
+  </style>
+</head>
+<body>
+  {% include "landing/_nav.html" %}
+
+  <div class="wrap">
+
+    <!-- Error state -->
+    {% if error %}
+    <div class="error-card">{{ error }} <a href="/search{% if query %}?q={{ query|urlencode }}{% endif %}">Cari ulang →</a></div>
+    {% endif %}
+
+    <!-- Empty state: no preview and no error -->
+    {% if not preview and not error %}
+    <div class="empty-state">
+      <div class="icon">📊</div>
+      <h2>Preview Analisis Bisnis</h2>
+      <p>Pilih bisnis dari hasil pencarian untuk melihat preview analisis — distribusi rating, top 3 masalah, dan teaser AI Advisor.</p>
+      <a href="/search" class="pub-btn" style="display:inline-block">Cari Bisnis →</a>
+    </div>
+    {% endif %}
+
+    <!-- Preview loaded -->
+    {% if preview %}
+    <div class="preview-header">
+      <h1>{{ preview.display_name }}</h1>
+      <div class="addr">{{ preview.formatted_address }}</div>
+      <div class="preview-meta">
+        <div class="rating-ring">
+          <div class="rating-big">{{ "%.1f"|format(preview.rating) }}</div>
+          <div>
+            <div class="rating-stars">
+              {% for i in range(5) %}
+              {% if preview.rating >= i + 1 %}★{% elif preview.rating >= i + 0.75 %}★{% else %}☆{% endif %}
+              {% endfor %}
+            </div>
+            <div class="review-label">{{ preview.review_count }} review</div>
+          </div>
+        </div>
+        {% if preview.branch_selector and preview.branch_selector|length > 1 %}
+        <div class="branch-select">
+          <select onchange="if(this.value) window.location='/preview?place_id='+this.value">
+            {% for b in preview.branch_selector %}
+            <option value="{{ b.place_id }}" {% if b.place_id == preview.place_id %}selected{% endif %}>
+              {{ b.name }} — {{ "%.1f"|format(b.rating) }}★
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Distribution -->
+    <div class="preview-card">
+      <h2>Distribusi Rating</h2>
+      {% for star in [5,4,3,2,1] %}
+      <div class="distro-bar">
+        <div class="distro-label">{{ star }}★</div>
+        <div class="distro-fill-wrap">
+          {% set pct = ((preview.distribution[star] / preview.review_count) * 100)|round|int %}
+          <div class="distro-fill" style="width:{{ pct if pct > 0 else 4 }}%;background:{% if star>=4 %}#16a34a{% elif star==3 %}#ea580c{% else %}#dc2626{% endif %}"></div>
+        </div>
+        <div class="distro-count">{{ preview.distribution[star] }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Top 3 Issues -->
+    <div class="preview-card">
+      <h2>Masalah Utama dari Review Pelanggan</h2>
+      <div style="color:var(--grm-muted);font-size:13px;margin-bottom:12px">Kategori masalah paling sering disebut — tanpa rekomendasi PIC atau tindakan</div>
+      {% for issue in preview.top_issues %}
+      <div class="issue-row">
+        <div class="issue-count">{{ issue.count }}</div>
+        <div class="issue-title">{{ issue.title }}</div>
+        <div class="issue-cat">{{ issue.category }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- AI Advisor Teaser -->
+    <div class="preview-card">
+      <div class="ai-header">
+        <h2 style="margin:0">AI Advisor</h2>
+        <div class="ai-badge">AI</div>
+      </div>
+      <div style="color:var(--grm-muted);font-size:13px;margin-bottom:16px">Rekomendasi tindakan otomatis untuk perbaikan — buka kunci untuk akses penuh</div>
+
+      {% for item in preview.ai_teaser_visible %}
+      <div class="teaser-item">
+        <div class="teaser-icon visible">✓</div>
+        <div style="flex:1;font-size:14px">{{ item.title }}</div>
+        <div style="color:var(--grm-muted);font-size:12px;flex-shrink:0">{{ item.count }} review</div>
+      </div>
+      {% endfor %}
+
+      <div class="teaser-item locked">
+        <div class="teaser-lock">🔒</div>
+        <div style="flex:1;font-size:14px">{{ preview.ai_teaser_locked.title }}</div>
+        <div style="color:var(--grm-muted);font-size:12px;flex-shrink:0">{{ preview.ai_teaser_locked.count }} review</div>
+      </div>
+      <div class="lock-banner">🔒 <span>Buka 3 prioritas perbaikan setelah daftar — akses penuh AI Advisor</span></div>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-section">
+      <h3>Lihat 3 prioritas perbaikan untuk bisnis Anda</h3>
+      <p>AI Advisor GRM memberi tahu APA yang harus diperbaiki, SIAPA yang bertanggung jawab, dan KAPAN deadline-nya.</p>
+      <a href="/register" class="cta-primary">Buka Prioritas Perbaikan →</a>
+      <br>
+      <a href="/register" class="cta-secondary">Coba Gratis 14 Hari — tanpa kartu kredit</a>
+    </div>
+
+    <!-- Trust -->
+    <div class="trust-row">
+      <span>🔒</span>
+      <span>Data dari Google Maps (publik) • tanpa login Google Business</span>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {% include "landing/_footer.html" %}
+</body>
+</html>

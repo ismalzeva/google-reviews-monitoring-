@@ -57,11 +57,11 @@ def search():
                 searched = True
                 results = search_places(query, city)
 
-                # Single result → redirect to demo preview
+                # Single result → redirect to public preview
                 if len(results) == 1:
                     r = results[0]
                     return redirect(
-                        url_for("landing.demo",
+                        url_for("public_preview.preview_page",
                                 q=r["display_name"],
                                 place_id=r["place_id"])
                     )
@@ -82,7 +82,7 @@ def search():
             if len(results) == 1:
                 r = results[0]
                 return redirect(
-                    url_for("landing.demo",
+                    url_for("public_preview.preview_page",
                             q=r["display_name"],
                             place_id=r["place_id"])
                 )
