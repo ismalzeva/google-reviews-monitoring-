@@ -66,10 +66,9 @@ class TestHierarchy(GatePBase):
     def test_section_order(self):
         html = self._html()
         order = [
+            ("AI Advisor — Prioritas Perbaikan", "advisor"),
             ("Rating rata-rata", "kpi"),
             ("Tren Rating", "trend"),
-            ("Performa Outlet", "performa"),
-            ("AI Advisor — Prioritas Perbaikan", "advisor"),
             ("Review Terbaru", "review-terbaru"),
         ]
         prev = -1
