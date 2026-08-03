@@ -434,6 +434,37 @@ def advisor():
     return jsonify(data)
 
 
+# ─── PERFORMANCE (per outlet / 1v1 / per city) ─────────────
+@bp.route("/analytics/outlets")
+@login_required
+def analytics_outlets():
+    business, err = _require_business()
+    if err:
+        return err
+    return jsonify(public_analytics.outlet_performance(business.tenant_id, business.id, _filters()))
+
+
+@bp.route("/analytics/cities")
+@login_required
+def analytics_cities():
+    business, err = _require_business()
+    if err:
+        return err
+    return jsonify(public_analytics.city_performance(business.tenant_id, business.id, _filters()))
+
+
+@bp.route("/analytics/compare")
+@login_required
+def analytics_compare():
+    business, err = _require_business()
+    if err:
+        return err
+    return jsonify(public_analytics.compare_outlets(
+        business.tenant_id, business.id, _filters(),
+        request.args.get("outlet_a", ""), request.args.get("outlet_b", ""),
+    ))
+
+
 # ─── EXPORT (§12) ──────────────────────────────────────────
 def _export_filename(ext: str) -> str:
     from datetime import datetime

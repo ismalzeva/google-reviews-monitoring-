@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Performa Outlet — GRM{% endblock %}
+{% block content %}
+<h1 class="grm-page-title" style="margin-bottom:4px">Performa Outlet</h1>
+<p class="grm-caption" style="margin:0 0 20px">Ukur performa tiap outlet dari review pelanggan, bandingkan 1 vs 1, dan lihat perbandingan per kota.</p>
+
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+  <label class="grm-caption">Periode:</label>
+  <select id="period" onchange="loadAll()" class="grm-input" style="width:auto;padding:7px 10px">
+    <option value="all">Seluruh Waktu</option>
+    <option value="7">7 hari</option>
+    <option value="30" selected>30 hari</option>
+    <option value="90">90 hari</option>
+  </select>
+  <span id="status" class="grm-caption"></span>
+</div>
+
+<!-- 1. PERFORMANCE PER OUTLET -->
+<div class="grm-card" style="margin-bottom:20px">
+  <div class="grm-section-title" style="margin-bottom:12px">Performa per Outlet</div>
+  <div id="outlets-box" class="grm-empty">Memuat…</div>
+</div>
+
+<!-- 2. BANDINGKAN 1 VS 1 -->
+<div class="grm-card" style="margin-bottom:20px">
+  <div class="grm-section-title" style="margin-bottom:12px">Bandingkan 1 vs 1</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <select id="cmp-a" class="grm-input" style="width:220px;padding:8px 10px"></select>
+    <select id="cmp-b" class="grm-input" style="width:220px;padding:8px 10px"></select>
+    <button class="grm-btn grm-btn-primary grm-btn-sm" onclick="loadCompare()">Bandingkan</button>
+  </div>
+  <div id="compare-box" class="grm-empty">Pilih dua outlet untuk dibandingkan.</div>
+</div>
+
+<!-- 3. PERFORMANCE PER KOTA -->
+<div class="grm-card">
+  <div class="grm-section-title" style="margin-bottom:12px">Perbandingan per Kota</div>
+  <div id="cities-box" class="grm-empty">Memuat…</div>
+</div>
+
+<script>
+let outletsCache = [];
+
+function periodQs() {
+  const v = document.getElementById('period').value;
+  return v === 'all' ? 'start_date=2000-01-01' : 'days=' + v;
+}
+
+async function loadAll() {
+  const status = document.getElementById('status');
+  status.textContent = 'memuat…';
+  const [o, c] = await Promise.all([
+    (await fetch('/api/public/analytics/outlets?' + periodQs())).json(),
+    (await fetch('/api/public/analytics/cities?' + periodQs())).json(),
+  ]);
+  outletsCache = o.outlets || [];
+  renderOutlets(o);
+  renderCities(c);
+  fillCompareSelects();
+  status.textContent = 'diperbarui ' + new Date().toLocaleTimeString('id-ID');
+}
+
+function renderOutlets(d) {
+  const box = document.getElementById('outlets-box');
+  if (!d.outlets || !d.outlets.length) { box.className = 'grm-empty'; box.textContent = 'Belum ada data outlet.'; return; }
+  box.className = '';
+  box.innerHTML = '<table class="grm-table"><thead><tr><th>#</th><th>Outlet</th><th>Kota</th><th>Rating</th><th>Review</th><th>Positif</th><th>Negatif</th><th>Keluhan utama</th><th>Pujian utama</th></tr></thead><tbody>' +
+    d.outlets.map(b => {
+      const s = b.sentiment_distribution || {};
+      const worst = b.top_complaint_categories && b.top_complaint_categories[0] ? b.top_complaint_categories[0] : '—';
+      const best = b.top_praise_categories && b.top_praise_categories[0] ? b.top_praise_categories[0] : '—';
+      return '<tr><td>' + b.rank + '</td><td><strong>' + esc(b.branch_name) + '</strong></td><td>' + esc(b.city_regency || '—') + '</td>' +
+        '<td><strong>⭐ ' + (b.avg_rating ?? '—') + '</strong></td><td>' + b.review_count + '</td>' +
+        '<td style="color:var(--grm-success)">' + (s.positive ?? 0) + '</td><td style="color:var(--grm-error)">' + (s.negative ?? 0) + '</td>' +
+        '<td class="grm-caption">' + esc(worst) + '</td><td class="grm-caption">' + esc(best) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function renderCities(d) {
+  const box = document.getElementById('cities-box');
+  if (!d.cities || !d.cities.length) { box.className = 'grm-empty'; box.textContent = 'Belum ada data kota.'; return; }
+  box.className = '';
+  box.innerHTML = d.cities.map(c => {
+    const ranks = c.outlets.map(o =>
+      '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0eee9;font-size:13px">' +
+        '<span><strong>#' + o.rank + '</strong> ' + esc(o.name) + '</span>' +
+        '<span>⭐ ' + o.avg_rating + ' · ' + o.review_count + ' review</span></div>').join('');
+    const s = c.sentiment || {};
+    return '<div style="border:1px solid #ece9e4;border-radius:var(--grm-radius-md);padding:14px 16px;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+        '<div class="grm-card-title">' + esc(c.city) + ' <span class="grm-caption">(' + c.branch_count + ' outlet)</span></div>' +
+        '<div class="grm-caption">Rata-rata ⭐ ' + c.avg_rating + ' · ' + c.total_reviews + ' review · ' + (s.positive||0) + ' positif / ' + (s.negative||0) + ' negatif</div></div>' +
+      ranks +
+      (c.top_complaints && c.top_complaints.length ? '<div class="grm-caption" style="margin-top:6px">Keluhan kota: ' + esc(c.top_complaints.join(', ')) + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function fillCompareSelects() {
+  const opts = outletsCache.map(b => '<option value="' + b.branch_id + '">' + esc(b.branch_name) + ' (' + esc(b.city_regency || '') + ')</option>').join('');
+  const a = document.getElementById('cmp-a'), b = document.getElementById('cmp-b');
+  a.innerHTML = opts; b.innerHTML = opts;
+  if (outletsCache.length > 1) { b.selectedIndex = 1; }
+}
+
+async function loadCompare() {
+  const a = document.getElementById('cmp-a').value, b = document.getElementById('cmp-b').value;
+  if (!a || !b || a === b) { document.getElementById('compare-box').innerHTML = '<div class="grm-empty">Pilih dua outlet yang berbeda.</div>'; return; }
+  const d = await (await fetch('/api/public/analytics/compare?outlet_a=' + a + '&outlet_b=' + b + '&' + periodQs())).json();
+  if (d.error) { document.getElementById('compare-box').innerHTML = '<div class="grm-empty">' + esc(d.error) + '</div>'; return; }
+  const box = document.getElementById('compare-box');
+  box.className = '';
+  const win = (x, y) => '<span style="color:var(--grm-success)">✓ ' + esc(x) + '</span>';
+  const sA = d.sentiment_a || {}, sB = d.sentiment_b || {};
+  box.innerHTML = '<div class="grm-grid-2">' +
+    '<div style="border:1px solid #ece9e4;border-radius:var(--grm-radius-md);padding:14px">' +
+      '<div class="grm-card-title">' + esc(d.outlet_a.name) + ' <span class="grm-caption">' + esc(d.outlet_a.city || '') + '</span></div>' +
+      '<div style="margin-top:10px;font-size:13px">⭐ Rating: <strong>' + d.rating.a + '</strong></div>' +
+      '<div style="font-size:13px">Review: <strong>' + d.review_count.a + '</strong></div>' +
+      '<div style="font-size:13px">Sentimen: <span style="color:var(--grm-success)">' + (sA.positive||0) + '</span> positif · <span style="color:var(--grm-error)">' + (sA.negative||0) + '</span> negatif</div>' +
+      '<div style="font-size:13px;margin-top:6px">Pujian: <span class="grm-caption">' + esc((d.praise_a||[]).join(', ') || '—') + '</span></div>' +
+      '<div style="font-size:13px">Keluhan: <span class="grm-caption" style="color:var(--grm-error)">' + esc((d.complaints_a||[]).join(', ') || '—') + '</span></div>' +
+    '</div>' +
+    '<div style="border:1px solid #ece9e4;border-radius:var(--grm-radius-md);padding:14px">' +
+      '<div class="grm-card-title">' + esc(d.outlet_b.name) + ' <span class="grm-caption">' + esc(d.outlet_b.city || '') + '</span></div>' +
+      '<div style="margin-top:10px;font-size:13px">⭐ Rating: <strong>' + d.rating.b + '</strong></div>' +
+      '<div style="font-size:13px">Review: <strong>' + d.review_count.b + '</strong></div>' +
+      '<div style="font-size:13px">Sentimen: <span style="color:var(--grm-success)">' + (sB.positive||0) + '</span> positif · <span style="color:var(--grm-error)">' + (sB.negative||0) + '</span> negatif</div>' +
+      '<div style="font-size:13px;margin-top:6px">Pujian: <span class="grm-caption">' + esc((d.praise_b||[]).join(', ') || '—') + '</span></div>' +
+      '<div style="font-size:13px">Keluhan: <span class="grm-caption" style="color:var(--grm-error)">' + esc((d.complaints_b||[]).join(', ') || '—') + '</span></div>' +
+    '</div></div>' +
+    '<div style="margin-top:14px;font-size:13px;padding:10px 14px;background:#f5f3ef;border-radius:var(--grm-radius-sm)">' +
+      '🏆 Rating lebih tinggi: ' + win(d.rating.winner === d.outlet_a.name ? d.outlet_a.name : d.outlet_b.name, '') +
+      ' · Selisih rating: <strong>' + Math.abs(d.rating.delta) + '</strong>' +
+    '</div>';
+}
+
+function esc(v) { return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+loadAll();
+</script>
+{% endblock %}

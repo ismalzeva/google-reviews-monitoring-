@@ -667,3 +667,104 @@ def export_rows(tenant_id: str, business_id: str, f: dict) -> list:
             "rating_only": "ya" if not r.has_text else "tidak",
         })
     return out
+
+
+# ─── PERFORMANCE (per outlet / 1v1 / per city) ─────────────
+def outlet_performance(tenant_id: str, business_id: str, f: dict) -> dict:
+    """Per-outlet performance from reviews (ranking + metrics)."""
+    bd = branch_breakdown(tenant_id, business_id, f)
+    outlets = bd["branches"]
+    outlets.sort(key=lambda x: x["avg_rating"], reverse=True)
+    for i, b in enumerate(outlets):
+        b["rank"] = i + 1
+    return {"outlets": outlets, "total_outlets": len(outlets)}
+
+
+def city_performance(tenant_id: str, business_id: str, f: dict) -> dict:
+    """Group outlet performance by city/regency."""
+    rows = _base_reviews(tenant_id, business_id, f)
+    cities = {}
+    for r, o in rows:
+        key = o.city_regency or "unknown"
+        entry = cities.setdefault(key, {"city": key, "outlets": {}, "reviews": []})
+        entry["reviews"].append((r, o))
+        entry["outlets"].setdefault(o.id, {"name": o.name, "rating_sum": 0, "n": 0})
+        entry["outlets"][o.id]["rating_sum"] += r.star_rating
+        entry["outlets"][o.id]["n"] += 1
+
+    result = []
+    for city, entry in cities.items():
+        revs = entry["reviews"]
+        ratings = [r.star_rating for r, _ in revs]
+        sent = {"positive": 0, "neutral": 0, "negative": 0, "mixed": 0}
+        cat_pol = {}
+        for r, _ in revs:
+            if not r.has_text:
+                continue
+            a = _analysis(r)
+            s = _sentiment(r, a)
+            sent[s] = sent.get(s, 0) + 1
+            for c in _categories_for(r, a):
+                cat_pol.setdefault(c, {"pos": 0, "neg": 0})
+                if s == "positive":
+                    cat_pol[c]["pos"] += 1
+                elif s in ("negative", "mixed"):
+                    cat_pol[c]["neg"] += 1
+        praise = sorted(cat_pol.items(), key=lambda x: x[1]["pos"], reverse=True)[:3]
+        complaints = sorted(cat_pol.items(), key=lambda x: x[1]["neg"], reverse=True)[:3]
+        outlet_list = []
+        for oid, od in entry["outlets"].items():
+            outlet_list.append({
+                "outlet_id": oid,
+                "name": od["name"],
+                "avg_rating": round(od["rating_sum"] / od["n"], 2) if od["n"] else 0.0,
+                "review_count": od["n"],
+            })
+        outlet_list.sort(key=lambda x: x["avg_rating"], reverse=True)
+        for i, o in enumerate(outlet_list):
+            o["rank"] = i + 1
+        result.append({
+            "city": city,
+            "total_reviews": len(revs),
+            "branch_count": len(entry["outlets"]),
+            "avg_rating": round(sum(ratings) / len(ratings), 2) if ratings else 0.0,
+            "sentiment": sent,
+            "top_praise": [c for c, _ in praise],
+            "top_complaints": [c for c, _ in complaints],
+            "outlets": outlet_list,
+        })
+    result.sort(key=lambda x: x["avg_rating"], reverse=True)
+    return {"cities": result}
+
+
+def compare_outlets(tenant_id: str, business_id: str, f: dict,
+                    outlet_a: str, outlet_b: str) -> dict:
+    """Side-by-side comparison of two outlets (1 vs 1)."""
+    bd = branch_breakdown(tenant_id, business_id, f)
+    branches = {b["branch_id"]: b for b in bd["branches"]}
+    a = branches.get(outlet_a)
+    b = branches.get(outlet_b)
+    if not a or not b:
+        return {"error": "Salah satu outlet tidak ditemukan pada periode ini."}
+
+    def _compare(label_a, label_b, val_a, val_b, higher_better=True):
+        if val_a == val_b:
+            verdict = "sama"
+        elif (val_a > val_b) == higher_better:
+            verdict = label_a
+        else:
+            verdict = label_b
+        return {"a": val_a, "b": val_b, "winner": verdict, "delta": round(val_a - val_b, 2)}
+
+    return {
+        "outlet_a": {"id": a["branch_id"], "name": a["branch_name"], "city": a["city_regency"]},
+        "outlet_b": {"id": b["branch_id"], "name": b["branch_name"], "city": b["city_regency"]},
+        "rating": _compare(a["branch_name"], b["branch_name"], a["avg_rating"], b["avg_rating"]),
+        "review_count": _compare(a["branch_name"], b["branch_name"], a["review_count"], b["review_count"]),
+        "sentiment_a": a["sentiment_distribution"],
+        "sentiment_b": b["sentiment_distribution"],
+        "praise_a": a["top_praise_categories"],
+        "praise_b": b["top_praise_categories"],
+        "complaints_a": a["top_complaint_categories"],
+        "complaints_b": b["top_complaint_categories"],
+    }

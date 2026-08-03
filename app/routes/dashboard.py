@@ -195,6 +195,14 @@ def reviews_page():
     return render_template('dashboard/reviews.html', business=business)
 
 
+@bp.route('/performa')
+@login_required
+def performa_page():
+    """Performa outlet — ranking, 1v1 compare, per-city comparison."""
+    business = current_user.business
+    return render_template('dashboard/performa.html', business=business)
+
+
 @bp.route('/settings')
 @login_required
 def settings_page():
