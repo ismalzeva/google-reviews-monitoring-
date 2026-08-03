@@ -119,6 +119,15 @@ function applyPeriod() {
     </div>
     <div style="font-size:13px;margin-top:8px"><strong>Bukti:</strong> {{ it.bukti.review_count }} review ({{ it.bukti.period }}){% if it.bukti.quotes %}<div class="grm-quote">“{{ it.bukti.quotes[0] }}”</div>{% endif %}</div>
     {% if it.saran_tindakan %}<div style="font-size:13px;margin-top:8px"><strong>Saran tindakan:</strong><ol style="margin:6px 0 0;padding-left:18px">{% for a in it.saran_tindakan %}<li>{{ a }}</li>{% endfor %}</ol></div>{% endif %}
+    {% if it.sub_issues %}
+    <div style="font-size:13px;margin-top:10px"><strong>Masalah spesifik:</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+        {% for s in it.sub_issues %}
+        <span style="background:#fff1e3;color:#9a3412;padding:3px 10px;border-radius:999px;font-size:12px" title="{{ s.contoh }}">{{ s.masalah }} · {{ s.count }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
     {% if it.needs_human_review %}<div class="grm-caption" style="color:#b45309;margin-top:6px">⚠️ perlu peninjauan manusia</div>{% endif %}
   </div>
   {% endfor %}

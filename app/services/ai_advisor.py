@@ -161,6 +161,75 @@ def _priority_for(category: str, count: int, has_critical: bool, low_star_count:
     return "Ringan"
 
 
+# ─── SPECIFIC SUB-ISSUE KEYWORDS (per kategori) ─────────────
+# Granular, actionable breakdown: "Top Masalah Spesifik".
+SUB_ISSUE_KEYWORDS = {
+    "rasa/kualitas produk": [
+        ("rasa berubah / tidak enak", ["rasa berubah", "tidak enak", "berbeda", "aneh", "hambar", "tawar", "asin", "kurang enak"]),
+        ("makanan basi / tidak segar", ["basi", "busuk", "tengik", "kadaluarsa", "tidak segar", "layu", "dingin", "tidak hangat"]),
+        ("topping / isi sedikit", ["topping", "toping", "isi sedikit", "ayam sedikit", "daging sedikit"]),
+    ],
+    "pelayanan": [
+        ("tidak ramah / cuek", ["tidak ramah", "cuek", "judes", "kasar", "galak", "jarang senyum", "tidak senyum", "tidak sopan"]),
+        ("tidak responsif / diabaikan", ["tidak respon", "diabaikan", "diam saja", "tidak dilayani", "dilayani lama"]),
+        ("kasir / pelayan lambat", ["kasir lambat", "pelayan lambat", "lambat melayani"]),
+    ],
+    "kecepatan/waktu tunggu": [
+        ("waktu tunggu lama", ["nunggu lama", "tunggu lama", "30 menit", "lama banget", "terlalu lama", "45 menit", "1 jam", "lama sekali"]),
+        ("antre panjang", ["antre", "antri", "ngantri", "queue", "ramai banget"]),
+    ],
+    "kebersihan": [
+        ("meja / area kotor", ["meja kotor", "meja lengket", "lantai kotor", "kotor"]),
+        ("toilet kotor", ["toilet", "wc kotor", "kamar mandi"]),
+        ("dapur tidak higienis", ["dapur kotor", "tidak higienis", "jijik"]),
+    ],
+    "harga": [
+        ("harga naik / mahal", ["harga naik", "naik terus", "makin mahal", "kemahalan", "mahal"]),
+        ("tidak sebanding", ["tidak sebanding", "tidak worth", "mahal untuk"]),
+    ],
+    "porsi": [
+        ("porsi mengecil / sedikit", ["porsi kecil", "mengecil", "sedikit", "dikit", "makin kecil", "porsi dikit"]),
+    ],
+    "suasana/tempat": [
+        ("AC tidak dingin / panas", ["ac tidak", "ac kurang", "panas", "gerah", "pengap", "tidak adem"]),
+        ("tempat sempit / tidak nyaman", ["sempit", "sesak", "tidak nyaman"]),
+    ],
+    "pesanan online/delivery": [
+        ("antar telat", ["telat", "lama sampai", "lama antar", "telat sampai"]),
+        ("pesanan kurang / salah", ["kurang", "salah", "tidak lengkap", "lupa", "tidak sesuai"]),
+        ("kemasan bocor / tumpah", ["bocor", "tumpah", "packing", "kemasan", "bungkus"]),
+    ],
+    "ketersediaan menu/stok": [
+        ("menu / stok habis", ["habis", "kosong", "tidak ada", "out of stock", "stok", "tidak tersedia"]),
+    ],
+    "kritis": [
+        ("keracunan / mual", ["mual", "muntah", "sakit perut", "keracunan", "diare", "sakit"]),
+        ("benda asing", ["lalat", "ulat", "kecoa", "rambut", "belatung", "serangga"]),
+    ],
+}
+
+
+def _extract_sub_issues(category: str, texts: list) -> list:
+    """Break a category's complaint texts into specific, actionable sub-issues."""
+    rules = SUB_ISSUE_KEYWORDS.get(category, [])
+    if not rules:
+        return []
+    results = []
+    for label, keywords in rules:
+        count = 0
+        example = ""
+        for t in texts:
+            tl = (t or "").lower()
+            if any(k in tl for k in keywords):
+                count += 1
+                if not example:
+                    example = t.strip()[:100]
+        if count > 0:
+            results.append({"masalah": label, "count": count, "contoh": example})
+    results.sort(key=lambda x: x["count"], reverse=True)
+    return results[:5]
+
+
 def generate(tenant_id: str, business_id: str, filters: dict) -> dict:
     """Generate top customer-experience issues (max 3) for active filters."""
     from app.services import public_analytics as pa
@@ -188,12 +257,14 @@ def generate(tenant_id: str, business_id: str, filters: dict) -> dict:
                 "critical_count": 0,
                 "ratings": [],
                 "quotes": [],
+                "texts": [],
                 "period_start": start,
                 "period_end": end,
                 "sample_dates": [],
             })
             entry["count"] += 1
             entry["ratings"].append(review.star_rating)
+            entry["texts"].append(review.comment or "")
             if review.star_rating <= 2:
                 entry["low_star_count"] += 1
             if urg == "critical" or cat == "kritis":
@@ -243,5 +314,13 @@ def generate(tenant_id: str, business_id: str, filters: dict) -> dict:
     # Neutralize language: strip any accidental accusation phrasing
     for issue in top:
         issue.pop("score", None)
+        # Top Masalah Spesifik: granular sub-issue breakdown from complaint texts
+        key_match = None
+        for (oid, cat), e in issues.items():
+            if e["outlet"] == issue["outlet"] and ISSUE_MAP.get(cat, {}).get("masalah") == issue["masalah"]:
+                key_match = e
+                break
+        if key_match:
+            issue["sub_issues"] = _extract_sub_issues(key_match["category"], key_match["texts"])
 
     return {"issues": top, "generated_at": _now().isoformat()}

@@ -42,6 +42,9 @@ _NEGATIVE_WORDS = {
     "gak bersih", "no", "bad", "terrible", "awful", "horrible",
     "disgusting", "worst", "poor", "dissatisfied", "unfriendly",
     "rude", "dirty", "slow", "expensive", "overpriced",
+    "judes", "kasar", "galak", "cuek", "diabaikan", "tidak respon",
+    "tidak sopan", "tidak dilayani", "mengecil", "hambar", "tawar",
+    "berubah", "tidak sesuai", "bocor", "tumpah",
 }
 
 _NEGATION_PREFIXES = {"tidak", "gak", "nggak", "enggak", "ga", "tak", "bukan"}
