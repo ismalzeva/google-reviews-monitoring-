@@ -52,8 +52,15 @@ def _get_business() -> Business:
     return current_user.business if current_user.is_authenticated else None
 
 
+DEFAULT_SEARCH_CITIES = ["Depok", "Bekasi", "Jakarta", "Bogor", "Tangerang", "Bandung"]
+
+
 def _discover_locations(query: str, city: str = None):
-    """Discovery via provider adapter when available, else mock search."""
+    """Discovery via provider adapter when available, else mock search.
+
+    The crawler actor returns ~1 place per search term, so when no city is
+    given we loop several Indonesian cities to surface ALL branches.
+    """
     from app.services.public_provider import build_public_review_adapter
     try:
         adapter = build_public_review_adapter()
@@ -61,7 +68,8 @@ def _discover_locations(query: str, city: str = None):
         adapter = None
     if adapter is not None and hasattr(adapter, "discover"):
         try:
-            return adapter.discover(query, city=city), "apify"
+            cities = None if city else DEFAULT_SEARCH_CITIES
+            return adapter.discover(query, city=city, cities=cities), "apify"
         except Exception:
             # fall through to mock search only for dev/test; production error surfaces
             raise
@@ -151,7 +159,7 @@ def discover():
     return jsonify({"candidates": candidates})
 
 
-# ─── STEP 3: VERIFY → OUTLET ───────────────────────────────
+# ─── STEP 3: VERIFY → OUTLET (multi-select) ───────────────
 @bp.route("/verify", methods=["POST"])
 @login_required
 def verify():
@@ -159,47 +167,48 @@ def verify():
     if not business:
         return jsonify({"error": "Belum ada bisnis terhubung."}), 400
     data = request.get_json(silent=True) or {}
-    place_id = (data.get("place_id") or "").strip()
-    if not place_id:
-        return jsonify({"error": "Place ID tidak ditemukan."}), 400
+    # Accept either a single candidate or a list of candidates
+    candidates = data.get("candidates")
+    if candidates is None:
+        candidates = [data]
 
-    outlet = Outlet.query.filter_by(
-        tenant_id=business.tenant_id, public_place_id=place_id
-    ).first()
-    if outlet is None:
-        outlet = Outlet(
-            id=str(uuid.uuid4()),
-            tenant_id=business.tenant_id,
-            business_id=business.id,
-            name=data.get("display_name") or "Outlet",
-            address=data.get("formatted_address"),
-            latitude=_num(data.get("latitude")),
-            longitude=_num(data.get("longitude")),
-            public_place_id=place_id,
-            maps_url=data.get("google_maps_uri"),
-            business_rating=_num(data.get("rating")),
-            business_review_count=_int(data.get("review_count")),
-            province=data.get("province"),
-            city_regency=data.get("city_regency"),
-            district=data.get("district"),
-            source=(data.get("source") or "apify"),
-            owner_verification_status="owner_confirmed",
-            gbp_match_status="unmatched",
-            monitor_enabled=True,
-            reply_enabled=False,
-            status="active",
-        )
-        db.session.add(outlet)
-        db.session.commit()
-    else:
-        outlet.monitor_enabled = True
-        outlet.status = "active"
-        outlet.reply_enabled = False
-        db.session.commit()
-
-    already = Review.query.filter_by(outlet_id=outlet.id).count() > 0
-    return jsonify({
-        "outlet": {
+    created = []
+    for cand in candidates:
+        place_id = (cand.get("place_id") or "").strip()
+        if not place_id:
+            continue
+        outlet = Outlet.query.filter_by(
+            tenant_id=business.tenant_id, public_place_id=place_id
+        ).first()
+        if outlet is None:
+            outlet = Outlet(
+                id=str(uuid.uuid4()),
+                tenant_id=business.tenant_id,
+                business_id=business.id,
+                name=cand.get("display_name") or "Outlet",
+                address=cand.get("formatted_address"),
+                latitude=_num(cand.get("latitude")),
+                longitude=_num(cand.get("longitude")),
+                public_place_id=place_id,
+                maps_url=cand.get("google_maps_uri"),
+                business_rating=_num(cand.get("rating")),
+                business_review_count=_int(cand.get("review_count")),
+                province=cand.get("province"),
+                city_regency=cand.get("city_regency"),
+                district=cand.get("district"),
+                source=(cand.get("source") or "apify"),
+                owner_verification_status="owner_confirmed",
+                gbp_match_status="unmatched",
+                monitor_enabled=True,
+                reply_enabled=False,
+                status="active",
+            )
+            db.session.add(outlet)
+        else:
+            outlet.monitor_enabled = True
+            outlet.status = "active"
+            outlet.reply_enabled = False
+        created.append({
             "id": outlet.id,
             "name": outlet.name,
             "address": outlet.address,
@@ -208,9 +217,13 @@ def verify():
             "place_id": outlet.public_place_id,
             "city_regency": outlet.city_regency,
             "district": outlet.district,
-        },
-        "already_synced": already,
-    })
+            "already_synced": Review.query.filter_by(outlet_id=outlet.id).count() > 0,
+        })
+    db.session.commit()
+
+    if not created:
+        return jsonify({"error": "Tidak ada outlet valid yang dipilih."}), 400
+    return jsonify({"outlets": created})
 
 
 def _num(v):
@@ -235,18 +248,23 @@ def sync():
     if not business:
         return jsonify({"error": "Belum ada bisnis terhubung."}), 400
     data = request.get_json(silent=True) or {}
-    outlet_id = (data.get("outlet_id") or "").strip()
+    outlet_ids = data.get("outlet_ids") or ([data.get("outlet_id")] if data.get("outlet_id") else [])
     mode = (data.get("mode") or "incremental").strip()
+    outlet_ids = [x for x in outlet_ids if x]
 
-    outlet = Outlet.query.filter_by(id=outlet_id, tenant_id=business.tenant_id).first()
-    if not outlet:
+    outlets = Outlet.query.filter(
+        Outlet.id.in_(outlet_ids), Outlet.tenant_id == business.tenant_id
+    ).all() if outlet_ids else []
+    if not outlets:
         return jsonify({"error": "Outlet tidak ditemukan."}), 404
+    outlet_id = outlets[0].id
 
     if _SYNC_PROGRESS.get(outlet_id, {}).get("running"):
         return jsonify({"error": "Sinkronisasi sedang berjalan."}), 409
 
     progress = {
         "outlet_id": outlet_id,
+        "outlet_ids": outlet_ids,
         "running": True,
         "stage": "syncing",
         "done": False,
@@ -275,7 +293,7 @@ def sync():
                 rep = sync_public_reviews(
                     tenant_id=_tenant_id,
                     business_id=_business_id,
-                    outlet_ids=[outlet_id],
+                    outlet_ids=outlet_ids,
                     adapter=adapter,
                     source=getattr(adapter, "source_name", "provider"),
                     full_sync=(mode == "full"),

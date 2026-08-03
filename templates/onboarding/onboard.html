@@ -81,80 +81,72 @@ async function doSearch() {
 }
 
 function renderCandidates(cands) {
+  state.candidates = cands;
   const box = document.getElementById('step-candidates');
-  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Pilih Outlet</h3>' +
-    cands.map(c => {
+  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 4px">Pilih Outlet</h3>' +
+    '<p style="font-size:13px;color:#6b7280;margin:0 0 10px">Centang outlet yang benar (bisa lebih dari satu), lalu konfirmasi.</p>' +
+    cands.map((c, i) => {
       const status = c.business_status === 'OPERATIONAL'
         ? '<span style="color:#16a34a;font-size:12px">Buka</span>'
         : '<span class="badge-closed">Tutup</span>';
-      return '<div class="cand">' +
-        '<div class="info"><div class="name">' + esc(c.display_name) + ' ' + status + '</div>' +
-        '<div class="meta">⭐ ' + (c.rating ?? '-') + ' · ' + (c.review_count ?? '-') + ' review<br>' +
+      return '<label style="display:flex;align-items:center;gap:12px;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff;cursor:pointer">' +
+        '<input type="checkbox" class="cand-check" data-idx="' + i + '" style="width:18px;height:18px;accent-color:#ff7a00">' +
+        '<div style="flex:1"><div style="font-weight:600;font-size:15px">' + esc(c.display_name) + ' ' + status + '</div>' +
+        '<div style="font-size:13px;color:#6b7280">⭐ ' + (c.rating ?? '-') + ' · ' + (c.review_count ?? '-') + ' review<br>' +
         esc(c.formatted_address || '') + (c.city_regency ? ' · ' + esc(c.city_regency) : '') + '</div></div>' +
-        '<button class="btn btn-primary" onclick="chooseCandidate(' + esc(JSON.stringify(c)) + ')">Pilih Outlet</button>' +
-        '</div>';
-    }).join('');
+        '</label>';
+    }).join('') +
+    '<div style="margin-top:12px"><button class="btn btn-primary" onclick="doVerifyBatch()">Konfirmasi</button></div>';
   show('step-candidates');
 }
 
-function chooseCandidate(c) {
-  state.candidate = c;
-  const box = document.getElementById('step-verify');
-  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Konfirmasi Outlet</h3>' +
-    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff">' +
-      '<div style="font-weight:600;font-size:15px">' + esc(c.display_name) + '</div>' +
-      '<div style="font-size:13px;color:#374151;margin-top:4px">' + esc(c.formatted_address || '') + '</div>' +
-      '<table style="font-size:13px;margin-top:10px;border-collapse:collapse">' +
-        '<tr><td style="padding:3px 16px 3px 0;color:#6b7280">Rating</td><td>⭐ ' + (c.rating ?? '-') + '</td></tr>' +
-        '<tr><td style="padding:3px 16px 3px 0;color:#6b7280">Jumlah review</td><td>' + (c.review_count ?? '-') + '</td></tr>' +
-        '<tr><td style="padding:3px 16px 3px 0;color:#6b7280">Place ID</td><td style="font-size:11px">' + esc(c.place_id) + '</td></tr>' +
-      '</table>' +
-      '<button class="btn btn-primary" style="margin-top:12px" onclick="doVerify()">Konfirmasi</button>' +
-    '</div>';
-  show('step-verify');
-}
-
-async function doVerify() {
-  const c = state.candidate;
-  const r = await jpost('/onboarding/verify', c);
-  if (r.status === 200) {
-    state.outletId = r.data.outlet.id;
-    state.already = r.data.already_synced;
-    renderSyncChoice(r.data.outlet);
+async function doVerifyBatch() {
+  const selected = [];
+  document.querySelectorAll('.cand-check:checked').forEach(cb => {
+    selected.push(state.candidates[parseInt(cb.dataset.idx)]);
+  });
+  if (!selected.length) { alert('Centang minimal satu outlet.'); return; }
+  const r = await jpost('/onboarding/verify', {candidates: selected});
+  if (r.status === 200 && r.data.outlets && r.data.outlets.length) {
+    state.outlets = r.data.outlets;
+    renderSyncChoice(r.data.outlets);
   } else {
     alert(r.data.error || 'Gagal memverifikasi outlet.');
   }
 }
 
-function renderSyncChoice(outlet) {
+function renderSyncChoice(outlets) {
   const box = document.getElementById('step-verify');
-  const modeHtml = state.already
-    ? '<div style="margin-top:12px;font-size:13px">Review sudah pernah disinkron. Pilih mode:' +
+  const anySynced = outlets.some(o => o.already_synced);
+  const listHtml = outlets.map(o =>
+    '<div style="font-size:13px;padding:2px 0">• ' + esc(o.name) + (o.city_regency ? ' · ' + esc(o.city_regency) : '') + (o.already_synced ? ' <span style="color:#6b7280">(pernah sync)</span>' : '') + '</div>'
+  ).join('');
+  const modeHtml = anySynced
+    ? '<div style="margin-top:12px;font-size:13px">Beberapa outlet pernah disinkron. Pilih mode:' +
       '<div style="margin-top:8px;display:flex;gap:8px">' +
         '<button class="btn btn-secondary" onclick="startSync(\'incremental\')">Sinkronisasi Bertahap</button>' +
         '<button class="btn btn-secondary" onclick="startSync(\'full\')">Sinkronisasi Penuh</button>' +
       '</div></div>'
     : '<button class="btn btn-primary" style="margin-top:12px" onclick="startSync(\'incremental\')">Mulai Sinkronisasi</button>';
-  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Siap Disinkronkan</h3>' +
-    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff">' +
-      '<div style="font-weight:600">' + esc(outlet.name) + '</div>' +
-      '<div style="font-size:13px;color:#374151;margin-top:4px">' + esc(outlet.address || '') + '</div>' +
-      modeHtml + '</div>';
+  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Siap Disinkronkan (' + outlets.length + ' outlet)</h3>' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff">' + listHtml + modeHtml + '</div>';
 }
 
 async function startSync(mode) {
   state.mode = mode;
+  const ids = state.outlets.map(o => o.id);
   const box = document.getElementById('step-progress');
   box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Sinkronisasi</h3>' +
     '<div id="progress-lines" style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff"></div>';
   show('step-progress');
   document.getElementById('progress-lines').innerHTML = '<div class="step-line">Discovery ✓</div>' +
     '<div class="step-line">Menunggu sinkronisasi…</div>';
-  const r = await jpost('/onboarding/sync', {outlet_id: state.outletId, mode: mode});
+  const r = await jpost('/onboarding/sync', {outlet_ids: ids, mode: mode});
   if (r.status !== 200) {
     document.getElementById('progress-lines').innerHTML = '<div class="error-box">' + (r.data.error || 'Gagal memulai.') + '</div>';
     return;
   }
+  state.outletId = ids[0];
   pollStatus();
 }
 

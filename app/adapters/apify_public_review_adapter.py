@@ -431,42 +431,54 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
         return window
 
     # ─── Discovery (actor compass/crawler-google-places) ───
-    def discover(self, business_name: str, city: str = None, max_places: int = None) -> list[dict]:
-        """Search public locations via the discovery actor."""
-        search_term = f"{business_name} {city}".strip() if city else business_name
+    def discover(self, business_name: str, city: str = None, max_places: int = None,
+                 cities: list = None) -> list[dict]:
+        """Search public locations via the discovery actor.
+
+        ``cities`` (optional) loops multiple city keywords and merges results —
+        the crawler actor returns only 1 place per search term, so multi-city
+        search is needed to surface ALL branches of a brand.
+        """
+        cities = cities or ([city] if city else [None])
         max_places = max_places or self.max_places
-        input_body = {
-            "searchStringsArray": [search_term],
-            "maxCrawledPlacesPerSearch": max_places,
-        }
-        run = self._run_actor(self.discovery_actor_id, input_body)
-        dataset_id = run.get("defaultDatasetId")
-        if not dataset_id:
-            raise ApifyError("apify discovery missing dataset", code="NO_DATASET")
-        page = self._get_dataset_items(dataset_id, offset=0, limit=max_places)
-        results = []
-        for item in page:
-            if not isinstance(item, dict):
-                continue
-            loc = item.get("location") or {}
-            results.append({
-                "place_id": item.get("placeId") or item.get("id"),
-                "display_name": item.get("title") or item.get("name") or "",
-                "formatted_address": item.get("address") or "",
-                "latitude": _safe_float(loc.get("lat")) if isinstance(loc, dict) else None,
-                "longitude": _safe_float(loc.get("lng")) if isinstance(loc, dict) else None,
-                "business_status": "OPERATIONAL",
-                "google_maps_uri": (
-                    f"https://www.google.com/maps/place/?q=place_id:{(item.get('placeId') or item.get('id'))}"
-                ),
-                "rating": _safe_float(item.get("totalScore")),
-                "review_count": _safe_int(item.get("reviewsCount")),
-                "province": None,
-                "city_regency": item.get("city"),
-                "district": item.get("neighborhood"),
-                "source": self.source_name,
-            })
-        return results
+        all_results = []
+        seen = set()
+        for city_kw in cities:
+            search_term = f"{business_name} {city_kw}".strip() if city_kw else business_name
+            input_body = {
+                "searchStringsArray": [search_term],
+                "maxCrawledPlacesPerSearch": max_places,
+                "language": "id",
+            }
+            run = self._run_actor(self.discovery_actor_id, input_body)
+            dataset_id = run.get("defaultDatasetId")
+            if not dataset_id:
+                raise ApifyError("apify discovery missing dataset", code="NO_DATASET")
+            page = self._get_dataset_items(dataset_id, offset=0, limit=max_places)
+            for item in page:
+                if not isinstance(item, dict):
+                    continue
+                pid = item.get("placeId") or item.get("id")
+                if not pid or pid in seen:
+                    continue
+                seen.add(pid)
+                loc = item.get("location") or {}
+                all_results.append({
+                    "place_id": pid,
+                    "display_name": item.get("title") or item.get("name") or "",
+                    "formatted_address": item.get("address") or "",
+                    "latitude": _safe_float(loc.get("lat")) if isinstance(loc, dict) else None,
+                    "longitude": _safe_float(loc.get("lng")) if isinstance(loc, dict) else None,
+                    "business_status": "OPERATIONAL",
+                    "google_maps_uri": f"https://www.google.com/maps/place/?q=place_id:{pid}",
+                    "rating": _safe_float(item.get("totalScore")),
+                    "review_count": _safe_int(item.get("reviewsCount")),
+                    "province": None,
+                    "city_regency": item.get("city"),
+                    "district": item.get("neighborhood"),
+                    "source": self.source_name,
+                })
+        return all_results
 
     # ─── Health ────────────────────────────────────────────
     def health_check(self) -> dict:

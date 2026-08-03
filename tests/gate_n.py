@@ -100,14 +100,22 @@ class TestOnboarding(GateNBase):
         r2 = self._verify(cand)
         self.assertEqual(r2.status_code, 200)
         data = r2.get_json()
-        self.assertIn("outlet", data)
-        self.assertEqual(data["outlet"]["place_id"], cand["place_id"])
+        self.assertIn("outlets", data)
+        outlet = data["outlets"][0]
+        self.assertEqual(outlet["place_id"], cand["place_id"])
         with self.app.app_context():
             o = Outlet.query.filter_by(tenant_id="tenant-n-1", public_place_id=cand["place_id"]).first()
             self.assertIsNotNone(o)
             self.assertTrue(o.monitor_enabled)
             self.assertFalse(o.reply_enabled)
-        self.assertFalse(data["already_synced"])
+        self.assertFalse(outlet["already_synced"])
+
+    def test_verify_multi_select(self):
+        r = self._discover()
+        cands = r.get_json()["candidates"]
+        r2 = self._verify({"candidates": cands[:2]})
+        self.assertEqual(r2.status_code, 200)
+        self.assertGreaterEqual(len(r2.get_json()["outlets"]), 1)
 
     def test_verify_already_synced_flag(self):
         r = self._discover()
@@ -125,7 +133,7 @@ class TestOnboarding(GateNBase):
                                   comment="test", has_text=True))
             db.session.commit()
         r = self._verify(cand)
-        self.assertTrue(r.get_json()["already_synced"])
+        self.assertTrue(r.get_json()["outlets"][0]["already_synced"])
 
     def test_sync_success(self):
         r = self._discover()
