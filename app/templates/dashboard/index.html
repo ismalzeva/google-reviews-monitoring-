@@ -239,7 +239,7 @@ function applyPeriod() {
     {% for it in lowest_reviews %}
     <div style="padding:8px 0;border-bottom:1px solid #f0eee9">
       <div class="grm-mini"><span style="color:var(--grm-error);font-weight:800">{{ it.rating }}★</span><span class="grm-caption">{{ it.branch }}{% if it.city %} · {{ it.city }}{% endif %}</span>{% if it.has_owner_reply %}<span class="grm-badge grm-badge-blue" style="font-size:11px">dibalas</span>{% endif %}<span style="margin-left:auto;font-size:11px;color:var(--grm-neutral)">{{ it.date }}</span></div>
-      <div style="font-size:13px;color:var(--grm-ink-soft);margin-top:3px">{{ it.snippet or '<em style="color:#9ca3af">rating only</em>' }}</div>
+      <div style="font-size:13px;color:var(--grm-ink-soft);margin-top:3px">{% if it.snippet %}{{ it.snippet }}{% else %}<em style="color:#9ca3af">rating only</em>{% endif %}</div>
     </div>
     {% endfor %}
     {% else %}<div class="grm-empty">Tidak ada review rating rendah pada periode ini. 👍</div>{% endif %}
@@ -250,7 +250,7 @@ function applyPeriod() {
     {% for it in highest_reviews %}
     <div style="padding:8px 0;border-bottom:1px solid #f0eee9">
       <div class="grm-mini"><span style="color:var(--grm-success);font-weight:800">{{ it.rating }}★</span><span class="grm-caption">{{ it.branch }}{% if it.city %} · {{ it.city }}{% endif %}</span>{% if it.has_owner_reply %}<span class="grm-badge grm-badge-blue" style="font-size:11px">dibalas</span>{% endif %}<span style="margin-left:auto;font-size:11px;color:var(--grm-neutral)">{{ it.date }}</span></div>
-      <div style="font-size:13px;color:var(--grm-ink-soft);margin-top:3px">{{ it.snippet or '<em style="color:#9ca3af">rating only</em>' }}</div>
+      <div style="font-size:13px;color:var(--grm-ink-soft);margin-top:3px">{% if it.snippet %}{{ it.snippet }}{% else %}<em style="color:#9ca3af">rating only</em>{% endif %}</div>
     </div>
     {% endfor %}
     {% else %}<div class="grm-empty">Tidak ada review rating tinggi pada periode ini.</div>{% endif %}
