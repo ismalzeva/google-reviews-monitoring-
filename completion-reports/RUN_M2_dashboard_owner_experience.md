@@ -64,4 +64,4 @@ kondisi outlet, masalah terbesar, siapa PIC, dan tindakan pertama.
 
 ## Commit
 
-- `<commit>` (diisi setelah commit) · working tree: `<tree>`
+- `f854266` feat: simplify dashboard for owner experience (RUN_M2) · working tree: clean
