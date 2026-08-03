@@ -52,7 +52,7 @@ def _get_business() -> Business:
     return current_user.business if current_user.is_authenticated else None
 
 
-DEFAULT_SEARCH_CITIES = ["Depok", "Bekasi", "Jakarta", "Bogor", "Tangerang", "Bandung"]
+DEFAULT_SEARCH_CITIES = ["Depok", "Bekasi", "Jakarta", "Bogor"]
 
 
 def _discover_locations(query: str, city: str = None):

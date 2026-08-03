@@ -49,6 +49,10 @@
   .step-line { font-size:13px; color:#374151; padding:6px 0; border-bottom:1px dashed #e5e7eb }
   .ok { color:#16a34a; font-weight:600 }
   .error-box { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:10px; padding:12px; font-size:14px }
+  .loading-box { background:#fff7ed; border:1px solid #fed7aa; color:#92400e; border-radius:10px; padding:14px 16px; font-size:14px; display:flex; gap:14px; align-items:center; margin-top:10px }
+  .loading-hint { color:#b45309; font-size:12px; }
+  .spinner { width:26px; height:26px; border:3px solid #fed7aa; border-top-color:#ff7a00; border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0 }
+  @keyframes spin { to { transform:rotate(360deg) } }
 </style>
 
 <script>
@@ -69,14 +73,20 @@ function show(id) {
 async function doSearch() {
   const msg = document.getElementById('search-msg');
   const btn = document.getElementById('btn-search');
-  btn.disabled = true; msg.textContent = 'Mencari…';
+  btn.disabled = true;
+  btn.textContent = 'Mencari…';
+  msg.innerHTML = '<div class="loading-box"><div class="spinner"></div>' +
+    '<div><strong>Mencari outlet…</strong><br>' +
+    'Kami mencari di beberapa kota (Depok, Bekasi, Jakarta, Bogor).<br>' +
+    '<span class="loading-hint">Proses ini bisa memakan waktu 1–2 menit. Mohon tunggu, jangan tutup halaman.</span></div></div>';
   const r = await jpost('/onboarding/discover', {query: document.getElementById('query').value,
                                                   url: document.getElementById('url').value});
   btn.disabled = false;
+  btn.textContent = 'Cari';
   if (r.status === 200 && r.data.candidates && r.data.candidates.length) {
     renderCandidates(r.data.candidates);
   } else {
-    msg.textContent = r.data.error || 'Tidak ada hasil. Coba nama lain.';
+    msg.innerHTML = '<div class="error-box">' + (r.data.error || 'Tidak ada hasil. Coba nama lain.') + '</div>';
   }
 }
 
