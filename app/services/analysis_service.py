@@ -30,13 +30,14 @@ _POSITIVE_WORDS = {
     "favorite", "favourite", "love", "satisfied", "amazing",
     "delicious", "friendly", "clean", "fast", "comfortable",
     "affordable", "worth", "value",
+    "delicioso", "mantap", "enak", "lezat", "nikmat", "gurih", "segar",
     "mantapp",
 }
 
 _NEGATIVE_WORDS = {
     "buruk", "parah", "kecewa", "mengecewakan", "lambat", "lamban",
     "mahal", "tidak enak", "tidak puas", "kurang", "jelek", "busuk",
-    "basi", "sakit", "diare", "mual", "jijik", "tidak ramah",
+    "basi", "sakit perut", "diare", "mual", "jijik", "tidak ramah",
     "tidak bersih", "kotor", "lama", "tidak nyaman", "sebal",
     "kesal", "marah", "benci", "gak enak", "gak puas", "gak ramah",
     "gak bersih", "no", "bad", "terrible", "awful", "horrible",
@@ -81,15 +82,15 @@ _TOPIC_KEYWORDS: dict[str, list[str]] = {
     "expensive": ["mahal", "kemahalan", "pricey", "overprice", "overpriced"],
     "value_for_money": ["worth", "value", "harga", "murah", "terjangkau",
                         "sebanding", "sesuai"],
-    "food_safety": ["basi", "sakit", "diare", "mual", "muntah", "keracunan",
+    "food_safety": ["basi", "diare", "mual", "muntah", "keracunan",
                     "kesehatan", "kadaluarsa", "kedaluwarsa", "belatung",
-                    "ulat", "kecoa", "lalat"],
+                    "ulat", "kecoa", "lalat", "sakit perut"],
     "delivery_delay": ["delivery", "ojol", "gofood", "grab", "shopeefood",
                        "anter", "kurir", "telat sampai"],
     "packaging": ["packaging", "bungkus", "kemasan", "bocor", "tumpah"],
 }
 
-_ILLNESS_KEYWORDS = ["sakit", "diare", "mual", "muntah", "keracunan", "basi",
+_ILLNESS_KEYWORDS = ["sakit perut", "diare", "mual", "muntah", "keracunan", "basi",
                      "demam", "sakit perut"]
 _CHEMICAL_KEYWORDS = ["kecoa", "belatung", "ulat", "lalat", "rambut", "kuku"]
 _LEGAL_KEYWORDS = ["lapor", "polisi", "pengacara", "hukum", "tuntut",

@@ -124,6 +124,8 @@ def index():
         'positive': summary.get('positive', 0),
         'neutral': summary.get('neutral', 0),
         'negative': summary.get('negative', 0),
+        'mixed': summary.get('mixed', 0),
+        'rating_only': summary.get('rating_only', 0),
         'total': summary.get('total_reviews', 0),
     }
 
@@ -147,6 +149,8 @@ def index():
         'positive': counts['positive'],
         'neutral': counts['neutral'],
         'negative': counts['negative'],
+        'mixed': counts['mixed'],
+        'rating_only': counts['rating_only'],
     }
     return render_template('dashboard/index.html', business=business, stats=stats,
                            summary=summary, advisor=advisor, outlets=outlet_data,

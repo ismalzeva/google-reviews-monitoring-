@@ -135,29 +135,46 @@ function applyPeriod() {
 </div>
 
 <!-- 4. RINGKASAN / KPI -->
-<div class="grm-kpi-grid" style="margin-bottom:16px">
+<div class="grm-kpi-grid" style="margin-bottom:12px">
   <div class="grm-kpi"><div class="label">Rating rata-rata</div><div class="value">{{ summary.avg_rating or '—' }}</div><div class="delta">{{ period_label }}</div></div>
   <div class="grm-kpi"><div class="label">Review</div><div class="value">{{ stats.reviews or '—' }}</div><div class="delta">{{ new_this_week }} baru minggu ini</div></div>
   <div class="grm-kpi"><div class="label">Positif</div><div class="value" style="color:var(--grm-success)">{{ stats.positive or '—' }}</div><div class="delta">apresiasi pelanggan</div></div>
   <div class="grm-kpi"><div class="label">Negatif</div><div class="value" style="color:var(--grm-error)">{{ stats.negative or '—' }}</div><div class="delta">perlu perhatian</div></div>
 </div>
+<!-- breakdown lengkap sentimen (agar total = jumlah review) -->
+<div class="grm-card" style="margin-bottom:16px;padding:12px 16px">
+  <div class="grm-caption">Rincian dari <strong>{{ stats.reviews }}</strong> review: <span style="color:var(--grm-success)">{{ stats.positive }} positif</span> · <span style="color:var(--grm-neutral)">{{ stats.neutral }} netral</span> · <span style="color:var(--grm-error)">{{ stats.negative }} negatif</span> · <span style="color:var(--grm-warning)">{{ stats.mixed }} campuran</span> · <span style="color:var(--grm-neutral)">{{ stats.rating_only }} rating-only (tanpa teks)</span></div>
+</div>
 
 <!-- 5. TREN + DISTRIBUSI -->
 <div class="grm-grid-2" style="margin-bottom:16px">
   <div class="grm-card">
-    <div class="grm-section-title" style="margin-bottom:12px">Tren Rating</div>
-    {% set trend = (period.trend or [])[-14:] %}
-    {% if trend %}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="grm-section-title">Tren Rating</div>
+      {% set trend_all = period.trend or [] %}
+      {% set trend = trend_all[-14:] %}
+      {% if trend|length >= 2 %}
+      {% set first_r = trend[0].avg_rating %}
+      {% set last_r = trend[-1].avg_rating %}
+      {% if last_r > first_r %}<span class="grm-caption" style="color:var(--grm-success)">▲ naik {{ (last_r - first_r)|round(2) }}</span>
+      {% elif last_r < first_r %}<span class="grm-caption" style="color:var(--grm-error)">▼ turun {{ (first_r - last_r)|round(2) }}</span>
+      {% else %}<span class="grm-caption">— stabil</span>{% endif %}
+      {% endif %}
+    </div>
+    {% if trend|length >= 2 %}
     {% set maxr = trend | map(attribute='avg_rating') | max %}
     <div class="grm-trend">
       {% for t in trend %}
-      <div class="grm-trendcol" title="{{ t.date }} · {{ t.avg_rating }}">
+      <div class="grm-trendcol" title="{{ t.date }} · rating {{ t.avg_rating }} · {{ t.review_count }} review">
         <div class="bar" style="height:{{ (t.avg_rating / (maxr or 1) * 100) | round }}%"></div>
-        <div class="day">{{ t.date[5:] if t.date }}</div>
+        <div class="day">{{ t.date[8:] if t.date else '' }}/{{ t.date[5:7] if t.date else '' }}</div>
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="grm-empty">Belum ada data review.</div>{% endif %}
+    <div class="grm-caption" style="margin-top:6px">Tanggal: {{ trend[0].date }} s/d {{ trend[-1].date }} (per hari, rating rata-rata)</div>
+    {% elif trend|length == 1 %}
+    <div class="grm-empty">Data periode ini terlalu sedikit untuk tren (1 hari).</div>
+    {% else %}<div class="grm-empty">Belum ada data review pada periode ini.</div>{% endif %}
   </div>
   <div class="grm-card">
     <div class="grm-section-title" style="margin-bottom:12px">Distribusi Rating</div>

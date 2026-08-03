@@ -154,9 +154,12 @@ def _quote(text, maxlen=110) -> str:
 
 
 def _priority_for(category: str, count: int, has_critical: bool, low_star_count: int) -> str:
-    if has_critical or category == "kritis":
+    # Proportional urgency: sensitive categories need strong evidence to be Mendesak.
+    if category == "kritis":
+        return "Mendesak" if count >= 2 else "Sedang"
+    if has_critical or low_star_count >= 3:
         return "Mendesak"
-    if count >= 4 or low_star_count >= 3:
+    if count >= 4 or low_star_count >= 2:
         return "Sedang"
     return "Ringan"
 
@@ -203,7 +206,7 @@ SUB_ISSUE_KEYWORDS = {
         ("menu / stok habis", ["habis", "kosong", "tidak ada", "out of stock", "stok", "tidak tersedia"]),
     ],
     "kritis": [
-        ("keracunan / mual", ["mual", "muntah", "sakit perut", "keracunan", "diare", "sakit"]),
+        ("keracunan / mual", ["mual", "muntah", "sakit perut", "keracunan", "diare"]),
         ("benda asing", ["lalat", "ulat", "kecoa", "rambut", "belatung", "serangga"]),
     ],
 }
@@ -242,6 +245,10 @@ def generate(tenant_id: str, business_id: str, filters: dict) -> dict:
     for review, outlet in rows:
         if not review.has_text:
             continue  # rating-only is NOT text-category evidence
+        # Strong guard: highly-rated reviews are praise, never problem evidence.
+        # Prevents false positives from sentiment misclassification.
+        if review.star_rating >= 4:
+            continue
         analysis = _analysis(review)
         sent = _sentiment(review, analysis)
         if sent not in ("negative", "mixed"):
@@ -278,6 +285,12 @@ def generate(tenant_id: str, business_id: str, filters: dict) -> dict:
     if not issues:
         return {"issues": [], "generated_at": _now().isoformat()}
 
+    # Period label: "Semua Waktu" instead of showing 2000-01-01 (uncredible)
+    if start and start.year <= 2000:
+        period_label = "Semua Waktu"
+    else:
+        period_label = f"{start.date().isoformat()} s/d {end.date().isoformat()}"
+
     # Score: count (weighted), low-star, critical
     scored = []
     for key, e in issues.items():
@@ -294,7 +307,7 @@ def generate(tenant_id: str, business_id: str, filters: dict) -> dict:
             "masalah": template["masalah"],
             "bukti": {
                 "review_count": e["count"],
-                "period": f"{e['period_start'].date().isoformat()} s/d {e['period_end'].date().isoformat()}",
+                "period": period_label,
                 "quotes": e["quotes"],
                 "low_star_count": e["low_star_count"],
                 "critical_count": e["critical_count"],
