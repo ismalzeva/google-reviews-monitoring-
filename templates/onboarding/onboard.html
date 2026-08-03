@@ -78,7 +78,7 @@ async function doSearch() {
   msg.innerHTML = '<div class="loading-box"><div class="spinner"></div>' +
     '<div><strong>Mencari outlet…</strong><br>' +
     'Kami mencari di beberapa kota (Depok, Bekasi, Jakarta, Bogor).<br>' +
-    '<span class="loading-hint">Proses ini bisa memakan waktu 1–2 menit. Mohon tunggu, jangan tutup halaman.</span></div></div>';
+    '<span class="loading-hint">Proses ini bisa memakan waktu 1–2 menit. Mohon tunggu, jangan tutup halaman.<br>Tidak menemukan cabang Anda? Ketik nama lengkapnya (mis. "Bubur Fay Ratna") atau tempel link Google Maps-nya.</span></div></div>';
   const r = await jpost('/onboarding/discover', {query: document.getElementById('query').value,
                                                   url: document.getElementById('url').value});
   btn.disabled = false;

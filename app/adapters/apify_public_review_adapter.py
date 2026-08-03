@@ -443,13 +443,17 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
         max_places = max_places or self.max_places
         all_results = []
         seen = set()
-        for city_kw in cities:
-            search_term = f"{business_name} {city_kw}".strip() if city_kw else business_name
+        # First: search without location (most popular branch), then per-city
+        # locationQuery to surface OTHER branches (crawler returns ~1 per query)
+        search_variants = [None] + list(cities or [])
+        for city_kw in search_variants:
             input_body = {
-                "searchStringsArray": [search_term],
+                "searchStringsArray": [business_name],
                 "maxCrawledPlacesPerSearch": max_places,
                 "language": "id",
             }
+            if city_kw:
+                input_body["locationQuery"] = city_kw
             run = self._run_actor(self.discovery_actor_id, input_body)
             dataset_id = run.get("defaultDatasetId")
             if not dataset_id:
