@@ -258,3 +258,8 @@ def get_preview_data(place_id: str) -> Optional[MockPreview]:
 
     logger.warning("preview miss for %s", place_id)
     return None
+
+
+def get_all_branches() -> list[MockPreview]:
+    """Return semua cabang yang tersedia di mock data."""
+    return list(MOCK_BRANCHES.values())
