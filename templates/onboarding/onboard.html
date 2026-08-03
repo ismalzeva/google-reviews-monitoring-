@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Tambah Outlet — GRM{% endblock %}
+{% block content %}
+<div class="container" style="max-width:760px;margin:0 auto;padding:24px">
+  <h1 style="font-size:22px;margin:0 0 4px">Tambah Outlet</h1>
+  <p style="color:#666;margin:0 0 20px;font-size:14px">
+    Masukkan nama bisnis atau tautan Google Maps, lalu pilih outlet Anda.
+  </p>
+
+  <!-- STEP 1: SEARCH -->
+  <div id="step-search" class="card" style="border:1px solid #e5e7eb;border-radius:12px;padding:18px;background:#fff">
+    <label style="font-size:13px;display:block;margin-bottom:6px">Nama bisnis</label>
+    <div style="display:flex;gap:8px">
+      <input id="query" type="text" placeholder="contoh: Bubur Fay"
+             style="flex:1;padding:10px 12px;border-radius:8px;border:1px solid #ccc;font-size:15px"/>
+      <button id="btn-search" onclick="doSearch()"
+              style="padding:10px 22px;border-radius:8px;border:0;background:#ff7a00;color:#fff;font-weight:600;cursor:pointer">Cari</button>
+    </div>
+    <div style="margin:10px 0 4px;text-align:center;color:#9ca3af;font-size:12px">— atau —</div>
+    <label style="font-size:13px;display:block;margin-bottom:6px">Tautan Google Maps</label>
+    <input id="url" type="text" placeholder="https://www.google.com/maps/place/..."
+           style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid #ccc;font-size:14px;box-sizing:border-box"/>
+    <div id="search-msg" style="margin-top:10px;font-size:13px;color:#888"></div>
+  </div>
+
+  <!-- STEP 2: CANDIDATES -->
+  <div id="step-candidates" style="display:none;margin-top:16px"></div>
+
+  <!-- STEP 3: VERIFY -->
+  <div id="step-verify" style="display:none;margin-top:16px"></div>
+
+  <!-- STEP 4: PROGRESS -->
+  <div id="step-progress" style="display:none;margin-top:16px"></div>
+
+  <!-- STEP 5: DONE -->
+  <div id="step-done" style="display:none;margin-top:16px"></div>
+</div>
+
+<style>
+  .cand { border:1px solid #e5e7eb; border-radius:10px; padding:12px 14px; margin-bottom:10px; background:#fff; display:flex; align-items:center; gap:12px }
+  .cand .info { flex:1 }
+  .cand .name { font-weight:600; font-size:15px }
+  .cand .meta { font-size:13px; color:#6b7280 }
+  .badge-closed { background:#fee2e2; color:#b91c1c; border-radius:999px; padding:1px 8px; font-size:11px }
+  .btn { padding:8px 16px; border-radius:8px; border:0; font-weight:600; cursor:pointer }
+  .btn-primary { background:#ff7a00; color:#fff }
+  .btn-secondary { background:#f3f4f6; color:#111827 }
+  .btn:disabled { opacity:.5; cursor:not-allowed }
+  .step-line { font-size:13px; color:#374151; padding:6px 0; border-bottom:1px dashed #e5e7eb }
+  .ok { color:#16a34a; font-weight:600 }
+  .error-box { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:10px; padding:12px; font-size:14px }
+</style>
+
+<script>
+let state = { outletId: null, mode: 'incremental' };
+
+async function jpost(url, body) {
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  let data = null;
+  try { data = await r.json(); } catch (e) {}
+  return {status: r.status, data: data || {}};
+}
+
+function show(id) {
+  ['step-search','step-candidates','step-verify','step-progress','step-done'].forEach(x =>
+    document.getElementById(x).style.display = (x === id ? 'block' : 'none'));
+}
+
+async function doSearch() {
+  const msg = document.getElementById('search-msg');
+  const btn = document.getElementById('btn-search');
+  btn.disabled = true; msg.textContent = 'Mencari…';
+  const r = await jpost('/onboarding/discover', {query: document.getElementById('query').value,
+                                                  url: document.getElementById('url').value});
+  btn.disabled = false;
+  if (r.status === 200 && r.data.candidates && r.data.candidates.length) {
+    renderCandidates(r.data.candidates);
+  } else {
+    msg.textContent = r.data.error || 'Tidak ada hasil. Coba nama lain.';
+  }
+}
+
+function renderCandidates(cands) {
+  const box = document.getElementById('step-candidates');
+  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Pilih Outlet</h3>' +
+    cands.map(c => {
+      const status = c.business_status === 'OPERATIONAL'
+        ? '<span style="color:#16a34a;font-size:12px">Buka</span>'
+        : '<span class="badge-closed">Tutup</span>';
+      return '<div class="cand">' +
+        '<div class="info"><div class="name">' + esc(c.display_name) + ' ' + status + '</div>' +
+        '<div class="meta">⭐ ' + (c.rating ?? '-') + ' · ' + (c.review_count ?? '-') + ' review<br>' +
+        esc(c.formatted_address || '') + (c.city_regency ? ' · ' + esc(c.city_regency) : '') + '</div></div>' +
+        '<button class="btn btn-primary" onclick="chooseCandidate(' + esc(JSON.stringify(c)) + ')">Pilih Outlet</button>' +
+        '</div>';
+    }).join('');
+  show('step-candidates');
+}
+
+function chooseCandidate(c) {
+  state.candidate = c;
+  const box = document.getElementById('step-verify');
+  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Konfirmasi Outlet</h3>' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff">' +
+      '<div style="font-weight:600;font-size:15px">' + esc(c.display_name) + '</div>' +
+      '<div style="font-size:13px;color:#374151;margin-top:4px">' + esc(c.formatted_address || '') + '</div>' +
+      '<table style="font-size:13px;margin-top:10px;border-collapse:collapse">' +
+        '<tr><td style="padding:3px 16px 3px 0;color:#6b7280">Rating</td><td>⭐ ' + (c.rating ?? '-') + '</td></tr>' +
+        '<tr><td style="padding:3px 16px 3px 0;color:#6b7280">Jumlah review</td><td>' + (c.review_count ?? '-') + '</td></tr>' +
+        '<tr><td style="padding:3px 16px 3px 0;color:#6b7280">Place ID</td><td style="font-size:11px">' + esc(c.place_id) + '</td></tr>' +
+      '</table>' +
+      '<button class="btn btn-primary" style="margin-top:12px" onclick="doVerify()">Konfirmasi</button>' +
+    '</div>';
+  show('step-verify');
+}
+
+async function doVerify() {
+  const c = state.candidate;
+  const r = await jpost('/onboarding/verify', c);
+  if (r.status === 200) {
+    state.outletId = r.data.outlet.id;
+    state.already = r.data.already_synced;
+    renderSyncChoice(r.data.outlet);
+  } else {
+    alert(r.data.error || 'Gagal memverifikasi outlet.');
+  }
+}
+
+function renderSyncChoice(outlet) {
+  const box = document.getElementById('step-verify');
+  const modeHtml = state.already
+    ? '<div style="margin-top:12px;font-size:13px">Review sudah pernah disinkron. Pilih mode:' +
+      '<div style="margin-top:8px;display:flex;gap:8px">' +
+        '<button class="btn btn-secondary" onclick="startSync(\'incremental\')">Sinkronisasi Bertahap</button>' +
+        '<button class="btn btn-secondary" onclick="startSync(\'full\')">Sinkronisasi Penuh</button>' +
+      '</div></div>'
+    : '<button class="btn btn-primary" style="margin-top:12px" onclick="startSync(\'incremental\')">Mulai Sinkronisasi</button>';
+  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Siap Disinkronkan</h3>' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff">' +
+      '<div style="font-weight:600">' + esc(outlet.name) + '</div>' +
+      '<div style="font-size:13px;color:#374151;margin-top:4px">' + esc(outlet.address || '') + '</div>' +
+      modeHtml + '</div>';
+}
+
+async function startSync(mode) {
+  state.mode = mode;
+  const box = document.getElementById('step-progress');
+  box.innerHTML = '<h3 style="font-size:16px;margin:0 0 10px">Sinkronisasi</h3>' +
+    '<div id="progress-lines" style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff"></div>';
+  show('step-progress');
+  document.getElementById('progress-lines').innerHTML = '<div class="step-line">Discovery ✓</div>' +
+    '<div class="step-line">Menunggu sinkronisasi…</div>';
+  const r = await jpost('/onboarding/sync', {outlet_id: state.outletId, mode: mode});
+  if (r.status !== 200) {
+    document.getElementById('progress-lines').innerHTML = '<div class="error-box">' + (r.data.error || 'Gagal memulai.') + '</div>';
+    return;
+  }
+  pollStatus();
+}
+
+async function pollStatus() {
+  const lines = document.getElementById('progress-lines');
+  const r = await fetch('/onboarding/status?outlet_id=' + state.outletId);
+  const data = (await r.json()).progress;
+  if (!data) { lines.innerHTML = '<div class="error-box">Status tidak ditemukan.</div>'; return; }
+  if (data.error) {
+    lines.innerHTML = '<div class="error-box">' + esc(data.error) + '</div>';
+    return;
+  }
+  if (data.stage === 'syncing' || data.stage === 'analyzing') {
+    lines.innerHTML = '<div class="step-line">Discovery ✓</div>' +
+      '<div class="step-line">' + (data.stage === 'analyzing' ? 'Analisis…' : 'Mengambil review… (' + data.received + ' diterima)') + '</div>';
+    setTimeout(pollStatus, 2000);
+    return;
+  }
+  if (data.done) {
+    const s = data.stats || {};
+    document.getElementById('step-done').innerHTML =
+      '<h3 style="font-size:16px;margin:0 0 10px">Selesai ✅</h3>' +
+      '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff;font-size:14px">' +
+        '<div>Review diterima: <strong>' + (s.received ?? 0) + '</strong></div>' +
+        '<div>Review baru: <strong>' + (s.inserted ?? 0) + '</strong></div>' +
+        '<div>Review diperbarui: <strong>' + (s.updated ?? 0) + '</strong></div>' +
+        '<div>Durasi: <strong>' + (s.duration_s ?? 0) + ' detik</strong></div>' +
+        '<a href="/dashboard/" class="btn btn-primary" style="display:inline-block;margin-top:14px;text-decoration:none">Lihat Dashboard</a>' +
+        ' <a href="/dashboard/advisor" class="btn btn-secondary" style="display:inline-block;margin-top:14px;text-decoration:none">Prioritas Perbaikan</a>' +
+      '</div>';
+    show('step-done');
+    return;
+  }
+  setTimeout(pollStatus, 2000);
+}
+
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+</script>
+{% endblock %}

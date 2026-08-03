@@ -65,6 +65,9 @@ def create_app(config_name=None):
     from app.routes.public import bp as public_bp
     app.register_blueprint(public_bp)
 
+    from app.routes.onboarding import bp as onboarding_bp
+    app.register_blueprint(onboarding_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):
