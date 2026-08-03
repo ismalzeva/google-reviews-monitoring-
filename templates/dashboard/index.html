@@ -1,45 +1,126 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Reviews Monitor{% endblock %}
+{% block title %}Dashboard — GRM{% endblock %}
 {% block content %}
-<div class="dashboard">
-    {% if business %}
-    <div class="dashboard-header">
-        <h1>{{ business.brand_name }}</h1>
-        <p class="subtitle">{{ business.name }} · {{ business.country }}</p>
-    </div>
+{% if not business %}
+  <div class="card"><h2>Belum Ada Bisnis</h2><p>Hubungi admin untuk mengundang Anda.</p></div>
+{% else %}
 
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-value">{{ stats.outlets }}</div>
-            <div class="stat-label">Outlet</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ stats.reviews }}</div>
-            <div class="stat-label">Review</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ stats.issues_open }}</div>
-            <div class="stat-label">Issue Terbuka</div>
-        </div>
+<!-- 1. HEADER OUTLET -->
+{% if outlets %}
+<div class="card" style="margin-bottom:16px">
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:800;font-size:20px">{{ outlets[0].name }}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">
+        {{ outlets[0].city_regency or '—' }}{% if outlets[0].district %} · {{ outlets[0].district }}{% endif %}
+      </div>
     </div>
+    <div style="display:flex;gap:24px;font-size:13px">
+      <div><div style="font-weight:800;font-size:20px">{{ outlets[0].rating or '—' }}</div><div style="color:var(--muted)">Rating</div></div>
+      <div><div style="font-weight:800;font-size:20px">{{ outlets[0].review_count or stats.reviews }}</div><div style="color:var(--muted)">Review</div></div>
+      <div><div style="font-weight:800;font-size:20px;color:var(--brand)">{{ new_this_week }}</div><div style="color:var(--muted)">Baru minggu ini</div></div>
+      <div><div style="font-weight:800;font-size:14px;padding-top:6px">{{ outlets[0].last_sync and outlets[0].last_sync[:10] or 'belum' }}</div><div style="color:var(--muted)">Sync terakhir</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-left:auto">
+      <a href="/dashboard/outlets" class="btn btn-primary">Sync Sekarang</a>
+      <a href="/onboarding/" class="btn btn-ghost">+ Tambah Outlet</a>
+    </div>
+  </div>
+</div>
+{% endif %}
 
-    <div class="info-box">
-        <h3>🚀 Selamat Datang!</h3>
-        <p>Pantau review publik bisnis Anda — tanpa login Google Business Profile.</p>
-        <p><strong>Cara pakai:</strong></p>
-        <ol>
-            <li>Temukan lokasi bisnis Anda (discovery publik)</li>
-            <li>Verifikasi satu outlet</li>
-            <li>Tarik review (50–100) dan lihat hasilnya di dashboard</li>
-            <li>Buka <a href="/dashboard/advisor">Prioritas Perbaikan Hari Ini</a> untuk rekomendasi tindakan</li>
-        </ol>
-        <p class="text-muted">Data berasal dari review publik Google Maps (provider Apify). Balasan langsung & auto-reply nonaktif.</p>
+<!-- 2. 🚨 PRIORITAS HARI INI (hero — terbesar setelah header) -->
+<div style="margin-bottom:16px">
+  <div style="font-weight:800;font-size:15px;margin-bottom:8px">🚨 Prioritas Hari Ini</div>
+  {% if advisor.issues %}
+  {% set top = advisor.issues[0] %}
+  <div style="border:2px solid #f59e0b;border-radius:16px;background:linear-gradient(180deg,#fffbeb,#fff);padding:20px">
+    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;color:#92400e">
+      🚨 Prioritas Hari Ini <span style="font-size:12px;font-weight:600;background:#fef3c7;padding:2px 10px;border-radius:999px">{{ top.priority }}</span>
     </div>
-    {% else %}
-    <div class="info-box">
-        <h2>Belum Ada Bisnis</h2>
-        <p>Anda belum terhubung dengan bisnis apapun. Hubungi admin untuk mengundang Anda.</p>
+    <div style="font-size:18px;font-weight:800;margin-top:10px">{{ top.masalah }}</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px">
+      {{ top.bukti.review_count }} review · {{ top.bukti.period }}
+    </div>
+    {% if top.bukti.quotes %}
+    <div style="margin-top:10px;font-size:14px;color:#374151;border-left:3px solid #f59e0b;padding-left:10px">
+      “{{ top.bukti.quotes[0] }}”
     </div>
     {% endif %}
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center">
+      <span style="font-size:13px;font-weight:700;padding:6px 14px;border-radius:999px;background:#eef2ff;color:#3730a3">PIC: {{ top.pic }}</span>
+      <div style="font-size:13px;flex:1;min-width:180px">
+        {% if top.saran_tindakan %}<strong>Tindakan pertama:</strong> {{ top.saran_tindakan[0] }}{% endif %}
+      </div>
+      <a href="/dashboard/advisor" style="font-size:13px;color:var(--brand);text-decoration:none;white-space:nowrap">Detail →</a>
+    </div>
+  </div>
+  {% else %}
+  <div style="border:2px solid #16a34a;border-radius:16px;background:#f0fdf4;padding:20px;text-align:center">
+    <div style="font-weight:800;font-size:16px;color:#166534">✅ Tidak ada masalah prioritas hari ini.</div>
+    <div style="font-size:13px;color:#166534;margin-top:4px">Review outlet dalam kondisi baik. Lanjutkan kualitas yang ada.</div>
+  </div>
+  {% endif %}
 </div>
+
+<!-- 3. RINGKASAN HARI INI (menonjol) -->
+<div class="card" style="margin-bottom:16px;border-left:5px solid var(--brand)">
+  <div style="font-weight:800;margin-bottom:10px;font-size:15px">Ringkasan Hari Ini</div>
+  <div style="display:flex;flex-wrap:wrap;gap:28px;font-size:14px">
+    <div>🔴 <strong style="font-size:18px">{{ advisor.issues|length }}</strong> masalah</div>
+    <div>🟢 <strong style="font-size:18px">{{ stats.positive }}</strong> apresiasi</div>
+    <div>🎯 Prioritas utama: <strong>{{ advisor.issues[0].masalah if advisor.issues else 'tidak ada' }}</strong></div>
+  </div>
+</div>
+
+<!-- 4. PRIORITAS PERBAIKAN (Top 3) -->
+<div class="card" style="margin-bottom:16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="font-weight:700">Prioritas Perbaikan</div>
+    <a href="/dashboard/advisor" style="font-size:13px;color:var(--brand);text-decoration:none">Lihat semua →</a>
+  </div>
+  {% if advisor.issues %}
+  {% for it in advisor.issues %}
+  <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;background:#f3f4f6">#{{ loop.index }}</span>
+      <span style="font-weight:700;font-size:14px">{{ it.masalah }}</span>
+      <span style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:999px;background:#eef2ff;color:#3730a3">{{ it.pic }}</span>
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px">
+      {{ it.bukti.review_count }} review · {{ it.bukti.period }}.
+    </div>
+    {% if it.saran_tindakan %}
+    <div style="font-size:13px;margin-top:6px">Tindakan: {{ it.saran_tindakan[0] }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="color:var(--muted);font-size:14px;padding:8px 0">Tidak ada masalah signifikan. 👍</div>
+  {% endif %}
+</div>
+
+<!-- 5. REVIEW SUMMARY (di bawah) -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
+  <div class="card"><div style="font-size:24px;font-weight:800">{{ stats.reviews }}</div><div style="font-size:13px;color:var(--muted)">Review (30 hari)</div></div>
+  <div class="card" style="border-left:4px solid #16a34a"><div style="font-size:24px;font-weight:800;color:#16a34a">{{ stats.positive }}</div><div style="font-size:13px;color:var(--muted)">Positif</div></div>
+  <div class="card" style="border-left:4px solid #9ca3af"><div style="font-size:24px;font-weight:800;color:#6b7280">{{ stats.neutral }}</div><div style="font-size:13px;color:var(--muted)">Netral</div></div>
+  <div class="card" style="border-left:4px solid #dc2626"><div style="font-size:24px;font-weight:800;color:#dc2626">{{ stats.negative }}</div><div style="font-size:13px;color:var(--muted)">Negatif</div></div>
+</div>
+
+<!-- 6. DAFTAR OUTLET -->
+{% if outlets|length > 1 %}
+<div class="card">
+  <div style="font-weight:700;margin-bottom:10px">Outlet</div>
+  {% for o in outlets %}
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+    <div style="flex:1"><div style="font-weight:600">{{ o.name }}</div><div style="font-size:12px;color:var(--muted)">{{ o.city_regency or '' }}</div></div>
+    <div style="font-size:13px;color:var(--muted)">⭐ {{ o.rating or '—' }} · {{ o.review_count or '—' }} review</div>
+    <a href="/dashboard/outlets" class="btn btn-ghost" style="padding:6px 12px;font-size:12px">Kelola</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endif %}
 {% endblock %}
