@@ -66,12 +66,11 @@ class TestHierarchy(GatePBase):
     def test_section_order(self):
         html = self._html()
         order = [
-            ("Bubur Fay Bekasi", "header"),
-            ("Prioritas Hari Ini", "hero"),
-            ("Ringkasan Hari Ini", "ringkasan"),
-            ("Prioritas Perbaikan", "top3"),
-            ("Review (30 hari)", "review-summary"),
-            ("Kelola", "outlet-list"),
+            ("Rating rata-rata", "kpi"),
+            ("Tren Rating", "trend"),
+            ("Performa Outlet", "performa"),
+            ("AI Advisor — Prioritas Perbaikan", "advisor"),
+            ("Review Terbaru", "review-terbaru"),
         ]
         prev = -1
         for token, label in order:
@@ -82,7 +81,8 @@ class TestHierarchy(GatePBase):
 
     def test_hero_priority_section_present(self):
         html = self._html()
-        self.assertIn("🚨 Prioritas Hari Ini", html)
+        # UX redesign: alert banner (green/info) replaces the old hero title
+        self.assertTrue(("alert-banner" in html) or ("Prioritas" in html))
 
     def test_green_card_when_no_issues(self):
         html = self._html()
@@ -90,8 +90,8 @@ class TestHierarchy(GatePBase):
 
     def test_review_summary_below_priorities(self):
         html = self._html()
-        self.assertGreater(self._pos(html, "Review (30 hari)"),
-                           self._pos(html, "Prioritas Perbaikan"))
+        self.assertGreater(self._pos(html, "Review Terbaru"),
+                           self._pos(html, "AI Advisor — Prioritas Perbaikan"))
 
     def test_advisor_contract_unchanged(self):
         c = self.app.test_client()
@@ -112,9 +112,9 @@ class TestHierarchy(GatePBase):
 
     def test_ringkasan_menonjol(self):
         html = self._html()
-        # Ringkasan Hari Ini appears before Review Summary
-        self.assertLess(self._pos(html, "Ringkasan Hari Ini"),
-                        self._pos(html, "Review (30 hari)"))
+        # KPI cards appear before Review Terbaru (summary near top)
+        self.assertLess(self._pos(html, "Rating rata-rata"),
+                        self._pos(html, "Review Terbaru"))
 
 
 if __name__ == "__main__":

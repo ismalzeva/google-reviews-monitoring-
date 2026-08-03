@@ -4,123 +4,198 @@
 {% if not business %}
   <div class="card"><h2>Belum Ada Bisnis</h2><p>Hubungi admin untuk mengundang Anda.</p></div>
 {% else %}
+<style>
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px }
+  .kpi { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px }
+  .kpi .label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em }
+  .kpi .value { font-size:26px; font-weight:800; margin-top:2px }
+  .kpi .delta { font-size:12px; color:var(--muted) }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:16px }
+  .panel h3 { margin:0 0 12px; font-size:14px; font-weight:700 }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px }
+  @media (max-width:820px) { .grid2 { grid-template-columns:1fr } }
+  .bar-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px }
+  .bar-track { flex:1; background:#f3f4f6; border-radius:6px; height:14px; overflow:hidden }
+  .bar-fill { height:100%; border-radius:6px }
+  .trend-bars { display:flex; align-items:flex-end; gap:6px; height:120px; padding-top:6px }
+  .trend-col { flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:2px }
+  .trend-col .bar { width:100%; background:var(--brand); border-radius:4px 4px 0 0; min-height:2px }
+  .trend-col .day { font-size:10px; color:var(--muted) }
+  .sentiment-stack { display:flex; height:100%; border-radius:4px; overflow:hidden; min-height:3px }
+  .review-item { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--line) }
+  .review-item:last-child { border-bottom:0 }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:700 }
+  .b-mendesak { background:#fee2e2; color:#b91c1c } .b-sedang { background:#fef3c7; color:#92400e } .b-ringan { background:#dcfce7; color:#166534 }
+  .alert-banner { border-radius:12px; padding:12px 16px; margin-bottom:16px; font-size:14px; display:flex; align-items:center; gap:10px }
+</style>
 
-<!-- 1. HEADER OUTLET -->
-{% if outlets %}
-<div class="card" style="margin-bottom:16px">
-  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">
-    <div style="flex:1;min-width:220px">
-      <div style="font-weight:800;font-size:20px">{{ outlets[0].name }}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:2px">
-        {{ outlets[0].city_regency or '—' }}{% if outlets[0].district %} · {{ outlets[0].district }}{% endif %}
-      </div>
-    </div>
-    <div style="display:flex;gap:24px;font-size:13px">
-      <div><div style="font-weight:800;font-size:20px">{{ outlets[0].rating or '—' }}</div><div style="color:var(--muted)">Rating</div></div>
-      <div><div style="font-weight:800;font-size:20px">{{ outlets[0].review_count or stats.reviews }}</div><div style="color:var(--muted)">Review</div></div>
-      <div><div style="font-weight:800;font-size:20px;color:var(--brand)">{{ new_this_week }}</div><div style="color:var(--muted)">Baru minggu ini</div></div>
-      <div><div style="font-weight:800;font-size:14px;padding-top:6px">{{ outlets[0].last_sync and outlets[0].last_sync[:10] or 'belum' }}</div><div style="color:var(--muted)">Sync terakhir</div></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-left:auto">
-      <a href="/dashboard/outlets" class="btn btn-primary">Sync Sekarang</a>
-      <a href="/onboarding/" class="btn btn-ghost">+ Tambah Outlet</a>
-    </div>
-  </div>
+<!-- 8. ALERT & NOTIFICATION -->
+{% set alerts = advisor.issues | selectattr('priority','equalto','Mendesak') | list %}
+{% if alerts %}
+<div class="alert-banner" style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c">
+  🔔 {{ alerts|length }} masalah mendesak — lihat Prioritas Perbaikan di bawah.
+</div>
+{% elif advisor.issues %}
+<div class="alert-banner" style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412">
+  ℹ️ Ada {{ advisor.issues|length }} prioritas perbaikan untuk ditindaklanjuti.
+</div>
+{% else %}
+<div class="alert-banner" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534">
+  ✅ Tidak ada masalah prioritas hari ini.
 </div>
 {% endif %}
 
-<!-- 2. 🚨 PRIORITAS HARI INI (hero — terbesar setelah header) -->
-<div style="margin-bottom:16px">
-  <div style="font-weight:800;font-size:15px;margin-bottom:8px">🚨 Prioritas Hari Ini</div>
-  {% if advisor.issues %}
-  {% set top = advisor.issues[0] %}
-  <div style="border:2px solid #f59e0b;border-radius:16px;background:linear-gradient(180deg,#fffbeb,#fff);padding:20px">
-    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;color:#92400e">
-      🚨 Prioritas Hari Ini <span style="font-size:12px;font-weight:600;background:#fef3c7;padding:2px 10px;border-radius:999px">{{ top.priority }}</span>
-    </div>
-    <div style="font-size:18px;font-weight:800;margin-top:10px">{{ top.masalah }}</div>
-    <div style="font-size:13px;color:var(--muted);margin-top:6px">
-      {{ top.bukti.review_count }} review · {{ top.bukti.period }}
-    </div>
-    {% if top.bukti.quotes %}
-    <div style="margin-top:10px;font-size:14px;color:#374151;border-left:3px solid #f59e0b;padding-left:10px">
-      “{{ top.bukti.quotes[0] }}”
-    </div>
-    {% endif %}
-    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center">
-      <span style="font-size:13px;font-weight:700;padding:6px 14px;border-radius:999px;background:#eef2ff;color:#3730a3">PIC: {{ top.pic }}</span>
-      <div style="font-size:13px;flex:1;min-width:180px">
-        {% if top.saran_tindakan %}<strong>Tindakan pertama:</strong> {{ top.saran_tindakan[0] }}{% endif %}
+<!-- 1. KPI CARDS -->
+<div class="kpi-grid">
+  <div class="kpi"><div class="label">Rating rata-rata</div><div class="value">{{ summary.avg_rating or '—' }}</div><div class="delta">30 hari</div></div>
+  <div class="kpi"><div class="label">Review</div><div class="value">{{ stats.reviews or '—' }}</div><div class="delta">{{ new_this_week }} baru minggu ini</div></div>
+  <div class="kpi"><div class="label">Positif</div><div class="value" style="color:#16a34a">{{ stats.positive or '—' }}</div><div class="delta">apresiasi pelanggan</div></div>
+  <div class="kpi"><div class="label">Negatif</div><div class="value" style="color:#dc2626">{{ stats.negative or '—' }}</div><div class="delta">perlu perhatian</div></div>
+</div>
+
+<!-- 2 + 3 : TREND + DISTRIBUSI -->
+<div class="grid2">
+  <div class="panel">
+    <h3>Tren Rating</h3>
+    {% set trend = (period.trend or [])[-14:] %}
+    {% if trend %}
+    {% set maxr = trend | map(attribute='avg_rating') | max %}
+    <div class="trend-bars">
+      {% for t in trend %}
+      <div class="trend-col" title="{{ t.date }} · {{ t.avg_rating }}">
+        <div class="bar" style="height:{{ (t.avg_rating / (maxr or 1) * 100) | round }}%"></div>
+        <div class="day">{{ t.date[5:] if t.date }}</div>
       </div>
-      <a href="/dashboard/advisor" style="font-size:13px;color:var(--brand);text-decoration:none;white-space:nowrap">Detail →</a>
+      {% endfor %}
     </div>
+    {% else %}<div style="color:var(--muted);font-size:13px">Belum ada data review untuk ditampilkan.</div>{% endif %}
   </div>
-  {% else %}
-  <div style="border:2px solid #16a34a;border-radius:16px;background:#f0fdf4;padding:20px;text-align:center">
-    <div style="font-weight:800;font-size:16px;color:#166534">✅ Tidak ada masalah prioritas hari ini.</div>
-    <div style="font-size:13px;color:#166534;margin-top:4px">Review outlet dalam kondisi baik. Lanjutkan kualitas yang ada.</div>
-  </div>
-  {% endif %}
-</div>
-
-<!-- 3. RINGKASAN HARI INI (menonjol) -->
-<div class="card" style="margin-bottom:16px;border-left:5px solid var(--brand)">
-  <div style="font-weight:800;margin-bottom:10px;font-size:15px">Ringkasan Hari Ini</div>
-  <div style="display:flex;flex-wrap:wrap;gap:28px;font-size:14px">
-    <div>🔴 <strong style="font-size:18px">{{ advisor.issues|length }}</strong> masalah</div>
-    <div>🟢 <strong style="font-size:18px">{{ stats.positive }}</strong> apresiasi</div>
-    <div>🎯 Prioritas utama: <strong>{{ advisor.issues[0].masalah if advisor.issues else 'tidak ada' }}</strong></div>
+  <div class="panel">
+    <h3>Distribusi Rating</h3>
+    {% set total_star = star_dist.values() | sum %}
+    {% if total_star %}
+    {% for s in [5,4,3,2,1] %}
+    {% set c = star_dist.get(s, 0) %}
+    <div class="bar-row"><span style="width:24px;color:#f59e0b">{{ s }}★</span>
+      <div class="bar-track"><div class="bar-fill" style="width:{{ (c / total_star * 100) | round }}%;background:#f59e0b"></div></div>
+      <span style="width:30px;text-align:right">{{ c }}</span></div>
+    {% endfor %}
+    {% else %}<div style="color:var(--muted);font-size:13px">Belum ada review 30 hari terakhir.</div>{% endif %}
   </div>
 </div>
 
-<!-- 4. PRIORITAS PERBAIKAN (Top 3) -->
-<div class="card" style="margin-bottom:16px">
+<!-- 6 + 5 : SENTIMENT OVER TIME + TOP ASPEK -->
+<div class="grid2">
+  <div class="panel">
+    <h3>Sentimen dari Waktu ke Waktu</h3>
+    {% set st = (period.trend or [])[-7:] %}
+    {% if st %}
+    <div style="display:flex;gap:10px;height:130px;align-items:flex-end">
+      {% for t in st %}
+      {% set day_total = (t.sentiment.get('positive',0) + t.sentiment.get('neutral',0) + t.sentiment.get('negative',0)) if t.sentiment else 0 %}
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+        {% if day_total %}
+        <div style="width:100%;height:90px;display:flex;flex-direction:column;justify-content:flex-end">
+          <div class="sentiment-stack" style="flex-direction:column">
+            <div style="background:#16a34a;height:{{ (t.sentiment.get('positive',0) / day_total * 100) | round }}%"></div>
+            <div style="background:#9ca3af;height:{{ (t.sentiment.get('neutral',0) / day_total * 100) | round }}%"></div>
+            <div style="background:#dc2626;height:{{ (t.sentiment.get('negative',0) / day_total * 100) | round }}%"></div>
+          </div>
+        </div>
+        {% else %}<div style="width:100%;height:90px"></div>{% endif %}
+        <div style="font-size:10px;color:var(--muted)">{{ t.date[5:] if t.date }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:8px">
+      <span><span style="display:inline-block;width:8px;height:8px;background:#16a34a;border-radius:2px"></span> Positif</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:#9ca3af;border-radius:2px"></span> Netral</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:#dc2626;border-radius:2px"></span> Negatif</span>
+    </div>
+    {% else %}<div style="color:var(--muted);font-size:13px">Belum ada data.</div>{% endif %}
+  </div>
+  <div class="panel">
+    <h3>Aspek Teratas</h3>
+    {% set cats = (categories.categories or [])[:6] %}
+    {% if cats %}
+    {% set maxc = cats | map(attribute='count') | max %}
+    {% for c in cats %}
+    <div class="bar-row"><span style="width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.category }}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:{{ (c.count / (maxc or 1) * 100) | round }}%;background:var(--brand)"></div></div>
+      <span style="width:30px;text-align:right">{{ c.count }}</span></div>
+    {% endfor %}
+    {% else %}<div style="color:var(--muted);font-size:13px">Belum ada kategori dari review teks.</div>{% endif %}
+  </div>
+</div>
+
+<!-- 7. PERFORMA OUTLET -->
+<div class="panel">
+  <h3>Performa Outlet</h3>
+  {% if branches.branches %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+    {% for b in branches.branches %}
+    <div style="border:1px solid var(--line);border-radius:10px;padding:12px">
+      <div style="font-weight:700;font-size:14px">{{ b.branch_name }}</div>
+      <div style="font-size:13px;color:var(--muted)">{{ b.city_regency or '—' }}{% if b.district %} · {{ b.district }}{% endif %}</div>
+      <div style="margin-top:8px;font-size:22px;font-weight:800">⭐ {{ b.avg_rating or '—' }}</div>
+      <div style="font-size:12px;color:var(--muted)">{{ b.review_count }} review</div>
+      {% if b.top_complaint_categories %}<div style="font-size:12px;color:#b91c1c;margin-top:6px">Keluhan: {{ b.top_complaint_categories[0] }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<div style="color:var(--muted);font-size:13px">Belum ada outlet dengan review.</div>{% endif %}
+</div>
+
+<!-- AI ADVISOR — contract + Evidence/Confidence/Priority/Status -->
+<div class="panel">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="font-weight:700">Prioritas Perbaikan</div>
+    <h3 style="margin:0">AI Advisor — Prioritas Perbaikan</h3>
     <a href="/dashboard/advisor" style="font-size:13px;color:var(--brand);text-decoration:none">Lihat semua →</a>
   </div>
   {% if advisor.issues %}
   {% for it in advisor.issues %}
-  <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+  <div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;background:#f3f4f6">#{{ loop.index }}</span>
-      <span style="font-weight:700;font-size:14px">{{ it.masalah }}</span>
-      <span style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:999px;background:#eef2ff;color:#3730a3">{{ it.pic }}</span>
+      <span class="badge b-{{ it.priority|lower }}">{{ it.priority }}</span>
+      <span style="font-weight:700;font-size:15px">{{ it.masalah }}</span>
+      <span style="margin-left:auto;font-size:12px;padding:2px 10px;border-radius:999px;background:#eef2ff;color:#3730a3">PIC: {{ it.pic }}</span>
     </div>
-    <div style="font-size:13px;color:var(--muted);margin-top:6px">
-      {{ it.bukti.review_count }} review · {{ it.bukti.period }}.
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px;font-size:12px;color:var(--muted)">
+      <div><span style="color:#6b7280">Outlet:</span> <strong>{{ it.outlet }}</strong></div>
+      <div><span style="color:#6b7280">Priority:</span> <strong>{{ it.priority }}</strong></div>
+      <div><span style="color:#6b7280">Confidence:</span> <strong>{{ it.confidence }}</strong></div>
+      <div><span style="color:#6b7280">Status:</span> <strong>{{ it.status }}</strong></div>
+    </div>
+    <div style="font-size:13px;margin-top:8px"><strong>Bukti:</strong> {{ it.bukti.review_count }} review ({{ it.bukti.period }})
+      {% if it.bukti.quotes %}<div style="color:#374151;border-left:3px solid var(--brand);padding-left:10px;margin-top:6px">“{{ it.bukti.quotes[0] }}”</div>{% endif %}
     </div>
     {% if it.saran_tindakan %}
-    <div style="font-size:13px;margin-top:6px">Tindakan: {{ it.saran_tindakan[0] }}</div>
+    <div style="font-size:13px;margin-top:8px"><strong>Saran tindakan:</strong>
+      <ol style="margin:6px 0 0;padding-left:18px">{% for a in it.saran_tindakan %}<li>{{ a }}</li>{% endfor %}</ol>
+    </div>
     {% endif %}
+    {% if it.needs_human_review %}<div style="font-size:12px;color:#b45309;margin-top:6px">⚠️ perlu peninjauan manusia</div>{% endif %}
   </div>
   {% endfor %}
-  {% else %}
-  <div style="color:var(--muted);font-size:14px;padding:8px 0">Tidak ada masalah signifikan. 👍</div>
-  {% endif %}
+  {% else %}<div style="color:var(--muted);font-size:14px">Tidak ada masalah signifikan. 👍</div>{% endif %}
 </div>
 
-<!-- 5. REVIEW SUMMARY (di bawah) -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
-  <div class="card"><div style="font-size:24px;font-weight:800">{{ stats.reviews }}</div><div style="font-size:13px;color:var(--muted)">Review (30 hari)</div></div>
-  <div class="card" style="border-left:4px solid #16a34a"><div style="font-size:24px;font-weight:800;color:#16a34a">{{ stats.positive }}</div><div style="font-size:13px;color:var(--muted)">Positif</div></div>
-  <div class="card" style="border-left:4px solid #9ca3af"><div style="font-size:24px;font-weight:800;color:#6b7280">{{ stats.neutral }}</div><div style="font-size:13px;color:var(--muted)">Netral</div></div>
-  <div class="card" style="border-left:4px solid #dc2626"><div style="font-size:24px;font-weight:800;color:#dc2626">{{ stats.negative }}</div><div style="font-size:13px;color:var(--muted)">Negatif</div></div>
-</div>
-
-<!-- 6. DAFTAR OUTLET -->
-{% if outlets|length > 1 %}
-<div class="card">
-  <div style="font-weight:700;margin-bottom:10px">Outlet</div>
-  {% for o in outlets %}
-  <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
-    <div style="flex:1"><div style="font-weight:600">{{ o.name }}</div><div style="font-size:12px;color:var(--muted)">{{ o.city_regency or '' }}</div></div>
-    <div style="font-size:13px;color:var(--muted)">⭐ {{ o.rating or '—' }} · {{ o.review_count or '—' }} review</div>
-    <a href="/dashboard/outlets" class="btn btn-ghost" style="padding:6px 12px;font-size:12px">Kelola</a>
+<!-- 4. REVIEW TERBARU (data asli) -->
+<div class="panel">
+  <h3>Review Terbaru</h3>
+  {% if latest['items'] %}
+  {% for it in latest['items'] %}
+  <div class="review-item">
+    <div style="color:#f59e0b;font-size:13px;min-width:60px">{% for i in range(it.rating) %}★{% endfor %}{% for i in range(5 - it.rating) %}☆{% endfor %}</div>
+    <div style="flex:1">
+      <div style="font-size:14px">{{ it.snippet or '<em style="color:#9ca3af">rating only</em>' }}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">{{ it.reviewer }} · {{ it.date[:10] if it.date }} · {{ it.branch }}</div>
+    </div>
+    <span style="font-size:11px;color:var(--muted);align-self:center">{{ it.sentiment }}</span>
   </div>
   {% endfor %}
+  {% else %}<div style="color:var(--muted);font-size:13px">Belum ada review.</div>{% endif %}
 </div>
-{% endif %}
 
 {% endif %}
 {% endblock %}

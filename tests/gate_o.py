@@ -63,8 +63,8 @@ class TestOwnerDashboard(GateOBase):
         r = c.get("/dashboard/")
         self.assertEqual(r.status_code, 200)
         html = r.data.decode()
-        for token in ("Ringkasan Hari Ini", "Prioritas Perbaikan", "Review (30 hari)",
-                      "Positif", "Negatif", "Bubur Fay Bekasi"):
+        for token in ("Rating rata-rata", "AI Advisor — Prioritas Perbaikan",
+                      "Tren Rating", "Review Terbaru", "Performa Outlet"):
             self.assertIn(token, html)
 
     def test_mobile_render(self):
@@ -94,7 +94,7 @@ class TestOwnerDashboard(GateOBase):
     def test_summary_card(self):
         c = self._client("admin@buburfay.id", "pw1")
         html = c.get("/dashboard/").data.decode()
-        self.assertIn("Ringkasan Hari Ini", html)
+        self.assertIn("Rating rata-rata", html)
         self.assertIn("apresiasi", html)
 
     def test_dashboard_performance(self):

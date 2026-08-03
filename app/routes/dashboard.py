@@ -28,13 +28,36 @@ def index():
                                summary=None, advisor=None, outlets=None, new_this_week=0)
 
     from app.models.entities import Review, SyncReport
-    from app.services.public_analytics import parse_filters, executive_summary
+    from app import db as _db
+    from app.services.public_analytics import (
+        parse_filters, executive_summary, category_breakdown, branch_breakdown,
+        period_analytics, review_explorer,
+    )
     from app.services.ai_advisor import generate as advisor_generate
     from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
 
     f = parse_filters({'days': '30'})
     summary = executive_summary(business.tenant_id, business.id, f)
     advisor = advisor_generate(business.tenant_id, business.id, f)
+    categories = category_breakdown(business.tenant_id, business.id, f)
+    branches = branch_breakdown(business.tenant_id, business.id, f)
+    period = period_analytics(business.tenant_id, business.id, f)
+    latest = review_explorer(business.tenant_id, business.id, f, page=1, per_page=5)
+
+    # Star distribution (30d) from real data
+    week_start_dt = datetime.now(timezone.utc) - timedelta(days=30)
+    star_rows = (
+        _db.session.query(Review.star_rating, func.count())
+        .filter(
+            Review.tenant_id == business.tenant_id,
+            Review.business_id == business.id,
+            Review.create_time >= week_start_dt,
+        )
+        .group_by(Review.star_rating)
+        .all()
+    )
+    star_dist = {r: c for r, c in star_rows if r is not None}
 
     outlets = Outlet.query.filter_by(
         tenant_id=business.tenant_id, business_id=business.id, monitor_enabled=True
@@ -82,7 +105,9 @@ def index():
     }
     return render_template('dashboard/index.html', business=business, stats=stats,
                            summary=summary, advisor=advisor, outlets=outlet_data,
-                           new_this_week=new_this_week)
+                           new_this_week=new_this_week,
+                           categories=categories, branches=branches,
+                           period=period, latest=latest, star_dist=star_dist)
 
 
 @bp.route('/outlets')
