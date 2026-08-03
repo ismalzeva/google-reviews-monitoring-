@@ -59,7 +59,7 @@ Progress store in-memory (`_SYNC_PROGRESS`) — cukup untuk skala pilot 1 user; 
 
 ## Commit
 
-- `<commit>` (diisi setelah commit) · working tree: `<tree>`
+- `1e70e76` feat: add self-service onboarding flow (RUN_M1) · working tree: clean
 
 ## Screenshot
 
