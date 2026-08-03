@@ -128,6 +128,15 @@ def discover():
         return jsonify({"error": "Nama bisnis minimal 3 karakter."}), 400
 
     place_id = _extract_place_id(url) or (data.get("place_id") or "").strip()
+    # Fallback: Google share/search URLs carry q=<name> (kgmid format) — use it as query
+    if not place_id and url and not query:
+        import re as _re
+        import urllib.parse
+        m = _re.search(r"[?&]q=([^&]+)", url)
+        if m:
+            query = urllib.parse.unquote(m.group(1))
+    if not place_id and not query:
+        return jsonify({"error": "Tidak dapat mengenali tautan. Gunakan nama bisnis atau tautan Google Maps lokasi."}), 400
     try:
         if place_id:
             from app.services.public_provider import build_public_review_adapter
