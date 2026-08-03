@@ -51,8 +51,8 @@ GRM siap dipakai customer pertama — production readiness, TANPA fitur baru
 
 ## Tag
 
-- `v0.9 Pilot Release` (setelah commit)
+- `v0.9-pilot-release` (GRM v0.9 Pilot Release)
 
 ## Commit
 
-- `<commit>` (diisi setelah commit) · working tree: `<tree>`
+- `247aafe` feat: pilot customer readiness pages (RUN_M3) · working tree: clean
