@@ -74,6 +74,36 @@ def index():
     star_rows = star_q.group_by(Review.star_rating).all()
     star_dist = {r: c for r, c in star_rows if r is not None}
 
+    # Lowest & highest rated reviews (all branches, current period) — owner recap
+    def _period_reviews(rating_op, order):
+        q = Review.query.filter(
+            Review.tenant_id == business.tenant_id,
+            Review.business_id == business.id,
+            Review.create_time >= start_dt,
+            rating_op,
+        )
+        if end_dt:
+            q = q.filter(Review.create_time <= end_dt)
+        return q.order_by(order).limit(5).all()
+
+    lowest_reviews = _period_reviews(Review.star_rating <= 2, Review.create_time.desc())
+    highest_reviews = _period_reviews(Review.star_rating >= 5, Review.create_time.desc())
+
+    def _review_payload(r):
+        outlet = Outlet.query.get(r.outlet_id) if r.outlet_id else None
+        return {
+            "rating": r.star_rating,
+            "snippet": (r.comment or "")[:160],
+            "reviewer": r.reviewer_display_name,
+            "date": r.create_time.date().isoformat() if r.create_time else None,
+            "branch": outlet.name if outlet else "",
+            "city": outlet.city_regency if outlet else "",
+            "has_owner_reply": bool(r.owner_reply_text),
+        }
+
+    lowest_payload = [_review_payload(r) for r in lowest_reviews]
+    highest_payload = [_review_payload(r) for r in highest_reviews]
+
     outlets = Outlet.query.filter_by(
         tenant_id=business.tenant_id, business_id=business.id, monitor_enabled=True
     ).order_by(Outlet.name.asc()).all()
@@ -122,7 +152,8 @@ def index():
                            summary=summary, advisor=advisor, outlets=outlet_data,
                            new_this_week=new_this_week, period_label=period_label,
                            categories=categories, branches=branches,
-                           period=period, latest=latest, star_dist=star_dist)
+                           period=period, latest=latest, star_dist=star_dist,
+                           lowest_reviews=lowest_payload, highest_reviews=highest_payload)
 
 
 @bp.route('/outlets')

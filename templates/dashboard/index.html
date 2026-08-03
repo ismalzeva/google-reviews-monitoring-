@@ -159,20 +159,65 @@ function applyPeriod() {
 
 <!-- 7. PERFORMA OUTLET -->
 <div class="panel">
-  <h3>Performa Outlet</h3>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">Performa Outlet</h3>
+    <a href="/onboarding/" style="font-size:13px;color:var(--brand);text-decoration:none">+ Tambah Outlet</a>
+  </div>
   {% if branches.branches %}
+  {% set best = (branches.branches | map(attribute='avg_rating') | max) %}
+  {% set worst = (branches.branches | map(attribute='avg_rating') | min) %}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
     {% for b in branches.branches %}
     <div style="border:1px solid var(--line);border-radius:10px;padding:12px">
-      <div style="font-weight:700;font-size:14px">{{ b.branch_name }}</div>
+      <div style="font-weight:700;font-size:14px">{{ b.branch_name }}
+        {% if b.avg_rating == best and branches.branches|length > 1 %}<span style="font-size:11px;background:#dcfce7;color:#166534;padding:1px 8px;border-radius:999px;margin-left:6px">Terbaik</span>{% endif %}
+        {% if b.avg_rating == worst and branches.branches|length > 1 %}<span style="font-size:11px;background:#fee2e2;color:#b91c1c;padding:1px 8px;border-radius:999px;margin-left:6px">Perlu Perhatian</span>{% endif %}
+      </div>
       <div style="font-size:13px;color:var(--muted)">{{ b.city_regency or '—' }}{% if b.district %} · {{ b.district }}{% endif %}</div>
       <div style="margin-top:8px;font-size:22px;font-weight:800">⭐ {{ b.avg_rating or '—' }}</div>
       <div style="font-size:12px;color:var(--muted)">{{ b.review_count }} review</div>
       {% if b.top_complaint_categories %}<div style="font-size:12px;color:#b91c1c;margin-top:6px">Keluhan: {{ b.top_complaint_categories[0] }}</div>{% endif %}
+      {% if b.top_praise_categories %}<div style="font-size:12px;color:#166534;margin-top:2px">Pujian: {{ b.top_praise_categories[0] }}</div>{% endif %}
     </div>
     {% endfor %}
   </div>
-  {% else %}<div style="color:var(--muted);font-size:13px">Belum ada outlet dengan review.</div>{% endif %}
+  {% else %}<div style="color:var(--muted);font-size:13px">Belum ada outlet dengan review. <a href="/onboarding/" style="color:var(--brand)">Tambah outlet</a></div>{% endif %}
+</div>
+
+<!-- 2b/3b: REKAP RATING TERENDAH & TERTINGGI -->
+<div class="grid2">
+  <div class="panel">
+    <h3 style="color:#b91c1c">Rekap Rating Terendah</h3>
+    {% if lowest_reviews %}
+    {% for it in lowest_reviews %}
+    <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:#dc2626;font-weight:800">{{ it.rating }}★</span>
+        <span style="font-size:12px;color:var(--muted)">{{ it.branch }}{% if it.city %} · {{ it.city }}{% endif %}</span>
+        {% if it.has_owner_reply %}<span style="font-size:11px;background:#eef2ff;color:#3730a3;padding:1px 8px;border-radius:999px">dibalas</span>{% endif %}
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)">{{ it.date }}</span>
+      </div>
+      <div style="font-size:13px;color:#374151;margin-top:3px">{{ it.snippet or '<em style="color:#9ca3af">rating only</em>' }}</div>
+    </div>
+    {% endfor %}
+    {% else %}<div style="color:var(--muted);font-size:13px">Tidak ada review rating rendah pada periode ini. 👍</div>{% endif %}
+  </div>
+  <div class="panel">
+    <h3 style="color:#166534">Rekap Rating Tertinggi</h3>
+    {% if highest_reviews %}
+    {% for it in highest_reviews %}
+    <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:#16a34a;font-weight:800">{{ it.rating }}★</span>
+        <span style="font-size:12px;color:var(--muted)">{{ it.branch }}{% if it.city %} · {{ it.city }}{% endif %}</span>
+        {% if it.has_owner_reply %}<span style="font-size:11px;background:#eef2ff;color:#3730a3;padding:1px 8px;border-radius:999px">dibalas</span>{% endif %}
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)">{{ it.date }}</span>
+      </div>
+      <div style="font-size:13px;color:#374151;margin-top:3px">{{ it.snippet or '<em style="color:#9ca3af">rating only</em>' }}</div>
+    </div>
+    {% endfor %}
+    {% else %}<div style="color:var(--muted);font-size:13px">Tidak ada review rating tinggi pada periode ini.</div>{% endif %}
+  </div>
 </div>
 
 <!-- AI ADVISOR — contract + Evidence/Confidence/Priority/Status -->

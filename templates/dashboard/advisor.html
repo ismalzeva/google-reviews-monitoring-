@@ -5,14 +5,16 @@
   <h1 style="font-size:22px;margin:0 0 4px">Prioritas Perbaikan Hari Ini</h1>
   <p style="color:#666;margin:0 0 16px;font-size:14px">Fokus peningkatan customer experience berdasarkan review publik (source: Apify).</p>
 
-  <div style="margin-bottom:16px">
-    <label for="days" style="font-size:13px;margin-right:8px">Periode:</label>
+  <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <label for="days" style="font-size:13px;margin-right:4px">Periode:</label>
     <select id="days" onchange="loadAdvisor()" style="padding:6px 10px;border-radius:8px;border:1px solid #ccc">
+      <option value="all" selected>Seluruh Waktu</option>
       <option value="7">7 hari</option>
-      <option value="30" selected>30 hari</option>
+      <option value="30">30 hari</option>
       <option value="90">90 hari</option>
     </select>
-    <span id="status" style="margin-left:12px;font-size:13px;color:#888"></span>
+    <input id="month" type="month" onchange="loadAdvisor()" style="display:none;padding:6px 10px;border-radius:8px;border:1px solid #ccc">
+    <span id="status" style="margin-left:8px;font-size:13px;color:#888"></span>
   </div>
 
   <div id="issues"></div>
@@ -37,11 +39,17 @@
 
 <script>
 async function loadAdvisor() {
-  const days = document.getElementById('days').value;
+  const v = document.getElementById('days').value;
+  const m = document.getElementById('month');
+  m.style.display = (v === 'month') ? 'inline-block' : 'none';
+  let qs = '';
+  if (v === 'all') qs = 'start_date=2000-01-01';
+  else if (v === 'month') { if (m.value) qs = 'month=' + m.value; else { status.textContent = 'pilih bulan'; return; } }
+  else qs = 'days=' + v;
   const status = document.getElementById('status');
   status.textContent = 'memuat…';
   try {
-    const resp = await fetch('/api/public/advisor?days=' + days);
+    const resp = await fetch('/api/public/advisor?' + qs);
     const data = await resp.json();
     status.textContent = 'diperbarui ' + new Date(data.generated_at).toLocaleString('id-ID');
     render(data.issues || []);
