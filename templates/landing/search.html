@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if query %}Hasil: {{ query }} — {% endif %}GRM</title>
+  <style>
+    :root { --grm-primary:#ff7a00; --grm-ink:#111827; --grm-muted:#6b7280; --grm-bg:#faf9f7; --grm-line:#ece9e4; --grm-surface:#fff; --grm-success:#16a34a; }
+    * { box-sizing:border-box } body { margin:0; font-family:'Inter',system-ui,sans-serif; background:var(--grm-surface); color:var(--grm-ink); line-height:1.55 }
+    a { color:var(--grm-primary); text-decoration:none }
+    .pub-header { position:sticky; top:0; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--grm-line); z-index:20 }
+    .pub-nav { max-width:1080px; margin:0 auto; padding:14px 20px; display:flex; align-items:center; gap:24px }
+    .pub-logo { font-weight:800; font-size:19px; color:var(--grm-ink); flex-shrink:0 } .pub-logo span { color:var(--grm-primary) }
+    .pub-menu { display:flex; gap:18px; flex:1; overflow-x:auto } .pub-menu a { color:var(--grm-muted); font-size:14px; white-space:nowrap } .pub-menu a:hover,.pub-menu a.active { color:var(--grm-primary) }
+    .pub-actions { display:flex; gap:10px; flex-shrink:0 } .pub-link { color:var(--grm-ink); font-size:14px } .pub-btn { background:var(--grm-primary); color:#fff; padding:9px 18px; border-radius:8px; font-weight:600; font-size:14px; white-space:nowrap } .pub-btn:hover { background:#ea6d00; color:#fff }
+    .wrap { max-width:720px; margin:0 auto; padding:48px 20px }
+    .search-bar { display:flex; gap:8px; border:1px solid var(--grm-line); border-radius:12px; padding:8px; margin-bottom:32px; box-shadow:0 4px 16px rgba(16,24,40,.06) }
+    .search-bar input { flex:1; border:0; font-size:15px; padding:8px 12px; outline:none; font-family:inherit }
+    .search-bar .opt { border:0; border-left:1px solid var(--grm-line); font-size:14px; padding:8px 12px; outline:none; color:var(--grm-muted); font-family:inherit; max-width:130px }
+    .search-bar button { background:var(--grm-primary); color:#fff; border:0; border-radius:8px; padding:10px 20px; font-weight:600; cursor:pointer; font-family:inherit } .search-bar button:hover { background:#ea6d00 }
+    .info { font-size:14px; color:var(--grm-muted); margin-bottom:20px }
+    .error { background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:16px 18px; margin-bottom:20px; color:#991b1b; font-size:14px; line-height:1.6 }
+    .result-card { display:flex; align-items:center; gap:14px; border:1px solid var(--grm-line); border-radius:14px; padding:16px 18px; margin-bottom:10px; transition:box-shadow .15s, border-color .15s; cursor:pointer; background:var(--grm-surface) }
+    .result-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.06); border-color:#ffe0c0 }
+    .result-card .icon { background:var(--grm-bg); border-radius:10px; width:44px; height:44px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:18px; font-weight:800; color:var(--grm-muted) }
+    .result-card .info { flex:1; min-width:0; margin:0 }
+    .result-card .name { font-weight:700; font-size:16px; margin-bottom:2px } .result-card .addr { font-size:13px; color:var(--grm-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .result-card .meta { text-align:right; flex-shrink:0 }
+    .result-card .rating { font-size:18px; font-weight:800; color:var(--grm-success) } .result-card .reviews { font-size:12px; color:var(--grm-muted) }
+    .result-card .arrow { color:var(--grm-muted); font-size:18px; flex-shrink:0 }
+    .suggestions { margin-top:24px }
+    .suggestions h3 { font-size:16px; color:var(--grm-muted); margin-bottom:12px }
+    .suggestion-list { display:flex; flex-wrap:wrap; gap:8px } .suggestion { border:1px solid var(--grm-line); border-radius:8px; padding:8px 14px; font-size:14px; color:var(--grm-ink); background:var(--grm-bg); cursor:pointer } .suggestion:hover { border-color:var(--grm-primary); background:#fff }
+    .empty { text-align:center; padding:40px 20px }
+    .empty .icon { font-size:48px; margin-bottom:16px }
+    .empty h2 { font-size:22px; margin-bottom:8px }
+    .empty p { color:var(--grm-muted); font-size:15px; max-width:400px; margin:0 auto 20px; line-height:1.6 }
+    .pub-footer { border-top:1px solid var(--grm-line); margin-top:40px; background:var(--grm-bg) } .pub-foot-inner { max-width:1080px; margin:0 auto; padding:32px 20px; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:20px; font-size:14px; color:var(--grm-muted) } .pub-foot-inner a { color:var(--grm-muted); margin:0 4px }
+    @media (max-width:640px) { .search-bar { flex-wrap:wrap } .search-bar .opt { border-left:0; border-top:1px solid var(--grm-line); max-width:100%; width:100% } .result-card { flex-wrap:wrap } }
+  </style>
+</head>
+<body>
+  {% include "landing/_nav.html" %}
+
+  <div class="wrap">
+    <!-- Search bar (always visible) -->
+    <form class="search-bar" method="POST" action="/search">
+      <input type="text" name="q" placeholder="Nama bisnis atau link Google Maps, mis. Bubur Fay" value="{{ query }}" autofocus>
+      <input type="text" name="city" class="opt" placeholder="Kota (opsional)" value="{{ city }}">
+      <button type="submit">Cari →</button>
+    </form>
+
+    <!-- Error state -->
+    {% if error %}
+    <div class="error">
+      {{ error }}
+      {% if not results and searched %}
+      <div class="suggestions" style="margin-top:16px">
+        <div style="font-weight:600;margin-bottom:8px;color:#991b1b">Coba cari:</div>
+        {% for s in ['Bubur Fay', 'Bubur Fay Bekasi', 'Bubur Fay Depok', 'Bubur Fay Jakarta'] %}
+        <a href="/search?q={{ s|urlencode }}" class="suggestion" style="display:inline-block;border-color:#fecaca;background:#fff;margin:0 6px 6px 0">{{ s }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Results -->
+    {% if results %}
+    <div class="info">Ditemukan {{ result_count }} hasil untuk <strong>{{ query }}</strong></div>
+    {% for r in results %}
+    <a href="/demo?q={{ r.display_name|urlencode }}&place_id={{ r.place_id|urlencode }}" class="result-card" style="display:flex;color:var(--grm-ink);text-decoration:none">
+      <div class="icon">{{ (r.display_name or '?')[0] }}</div>
+      <div class="info">
+        <div class="name">{{ r.display_name }}</div>
+        <div class="addr">{{ r.formatted_address }}</div>
+      </div>
+      <div class="meta">
+        <div class="rating">★ {{ r.rating }}</div>
+        <div class="reviews">{{ r.review_count }} review</div>
+      </div>
+      <div class="arrow">→</div>
+    </a>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Empty state: searched but no results -->
+    {% if searched and not results and not error %}
+    <div class="empty">
+      <div class="icon">🔍</div>
+      <h2>Tidak ditemukan</h2>
+      <p>Kami belum bisa menemukan <strong>{{ query }}</strong> dalam data kami. Kami sedang mengembangkan pencarian yang lebih luas — sementara, coba cari contoh bisnis berikut:</p>
+      <div class="suggestion-list" style="justify-content:center">
+        <a href="/search?q=Bubur+Fay" class="suggestion">Bubur Fay</a>
+        <a href="/search?q=Bubur+Fay+Bekasi" class="suggestion">Bubur Fay Bekasi</a>
+        <a href="/search?q=Bubur+Fay+Depok" class="suggestion">Bubur Fay Depok</a>
+        <a href="/search?q=Bubur+Fay+Jakarta" class="suggestion">Bubur Fay Jakarta</a>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Cold state: first visit, no query yet -->
+    {% if not searched %}
+    <div class="empty">
+      <div class="icon">🏪</div>
+      <h2>Cari bisnis Anda</h2>
+      <p>Ketik nama bisnis di kolom pencarian di atas. Kami akan menampilkan data publik dari Google Maps — tanpa perlu login Google Business.</p>
+      <div class="info" style="margin-top:16px;display:flex;align-items:center;gap:6px;justify-content:center;color:var(--grm-muted)">
+        <span>🔒</span> Data publik · Tanpa akses akun Google Anda
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% include "landing/_footer.html" %}
+</body>
+</html>

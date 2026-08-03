@@ -383,7 +383,7 @@
   function goSearch() {
     var q = document.getElementById('pub-search').value.trim();
     if (!q) { alert('Masukkan nama bisnis atau link Google Maps terlebih dahulu.'); return; }
-    window.location = '/demo?q=' + encodeURIComponent(q);
+    window.location = '/search?q=' + encodeURIComponent(q);
   }
   document.getElementById('pub-search').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') goSearch();

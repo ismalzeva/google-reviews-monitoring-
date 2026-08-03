@@ -71,6 +71,9 @@ def create_app(config_name=None):
     from app.routes.landing import bp as landing_bp
     app.register_blueprint(landing_bp)
 
+    from app.routes.public_search import bp as public_search_bp
+    app.register_blueprint(public_search_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

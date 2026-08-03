@@ -99,7 +99,7 @@ Halaman publik yang menjual hasil, bukan fitur. Menjawab "ini buat saya?" dalam 
 - **Dependency:** S1 design doc (READY)
 - **Priority:** P0
 - **Estimasi:** L
-- **Status:** Todo
+- **Status:** Done
 
 #### GRM-002: Static Pages (Features, How It Works, Pricing, FAQ, Demo)
 
@@ -115,7 +115,7 @@ Halaman publik yang menjual hasil, bukan fitur. Menjawab "ini buat saya?" dalam 
 - **Dependency:** GRM-001
 - **Priority:** P1
 - **Estimasi:** M
-- **Status:** Todo
+- **Status:** Done
 
 ---
 
