@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harga — GRM</title>
+  <style>
+    :root { --grm-primary:#ff7a00; --grm-ink:#111827; --grm-muted:#6b7280; --grm-bg:#faf9f7; --grm-line:#ece9e4; --grm-surface:#fff; }
+    * { box-sizing:border-box } body { margin:0; font-family:'Inter',system-ui,sans-serif; background:var(--grm-surface); color:var(--grm-ink); line-height:1.55 }
+    a { color:var(--grm-primary); text-decoration:none }
+    .pub-header { position:sticky; top:0; background:rgba(255,255,255,.94); backdrop-filter:blur(10px); border-bottom:1px solid var(--grm-line); z-index:20 }
+    .pub-nav { max-width:1080px; margin:0 auto; padding:14px 20px; display:flex; align-items:center; gap:24px }
+    .pub-logo { font-weight:800; font-size:19px; color:var(--grm-ink); flex-shrink:0 } .pub-logo span { color:var(--grm-primary) }
+    .pub-menu { display:flex; gap:18px; flex:1; overflow-x:auto } .pub-menu a { color:var(--grm-muted); font-size:14px; white-space:nowrap } .pub-menu a:hover,.pub-menu a.active { color:var(--grm-primary) }
+    .pub-actions { display:flex; gap:10px; flex-shrink:0 } .pub-link { color:var(--grm-ink); font-size:14px } .pub-btn { background:var(--grm-primary); color:#fff; padding:9px 18px; border-radius:8px; font-weight:600; font-size:14px; white-space:nowrap } .pub-btn:hover { background:#ea6d00; color:#fff }
+    .wrap { max-width:960px; margin:0 auto; padding:64px 20px }
+    h1 { font-size:38px; font-weight:800; text-align:center; margin:0 0 8px; letter-spacing:-.02em }
+    .sub { text-align:center; color:var(--grm-muted); font-size:18px; margin:0 0 48px }
+    .plans { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; align-items:start }
+    .plan { border:1px solid var(--grm-line); border-radius:16px; padding:28px 24px; background:var(--grm-surface); transition:box-shadow .2s }
+    .plan:hover { box-shadow:0 4px 20px rgba(0,0,0,.06) }
+    .plan.popular { border:2px solid var(--grm-primary); box-shadow:0 8px 28px rgba(255,122,0,.12); position:relative }
+    .plan.popular::before { content:'Paling Populer'; position:absolute; top:-13px; left:50%; transform:translateX(-50%); background:var(--grm-primary); color:#fff; font-size:12px; font-weight:700; padding:4px 16px; border-radius:999px; white-space:nowrap }
+    .plan h3 { font-size:20px; margin:0 0 12px } .plan .price { font-size:36px; font-weight:800; margin-bottom:4px }
+    .plan .per { font-size:14px; color:var(--grm-muted); font-weight:400 }
+    .plan ul { list-style:none; padding:0; margin:20px 0 24px; font-size:14px; color:#4b5563 }
+    .plan li { padding:6px 0; padding-left:22px; position:relative; line-height:1.5 }
+    .plan li::before { content:'✓'; position:absolute; left:0; color:var(--grm-primary); font-weight:700 }
+    .plan .buy { display:block; text-align:center; padding:12px; border-radius:8px; font-weight:600; font-size:14px }
+    .plan .buy.primary { background:var(--grm-primary); color:#fff } .plan .buy.primary:hover { background:#ea6d00 }
+    .plan .buy.ghost { border:1px solid var(--grm-line); color:var(--grm-ink); background:var(--grm-surface) } .plan .buy.ghost:hover { border-color:var(--grm-primary); color:var(--grm-primary) }
+    .faq-mini { max-width:640px; margin:48px auto 0; padding-top:36px; border-top:1px solid var(--grm-line) }
+    .faq-mini h3 { font-size:20px; font-weight:800; text-align:center; margin:0 0 24px }
+    .faq-mini details { border:1px solid var(--grm-line); border-radius:12px; padding:14px 16px; margin-bottom:10px; background:var(--grm-surface) }
+    .faq-mini summary { font-weight:700; font-size:14px; cursor:pointer } .faq-mini p { font-size:13px; color:var(--grm-muted); margin:10px 0 0; line-height:1.6 }
+    .note { text-align:center; color:var(--grm-muted); font-size:13px; margin-top:28px }
+    .pub-footer { border-top:1px solid var(--grm-line); margin-top:32px; background:var(--grm-bg) } .pub-foot-inner { max-width:1080px; margin:0 auto; padding:32px 20px; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:20px; font-size:14px; color:var(--grm-muted) } .pub-foot-inner a { color:var(--grm-muted); margin:0 4px } .pub-caption { font-size:13px; color:var(--grm-muted) }
+    @media (max-width:640px) { h1 { font-size:28px } .plans { grid-template-columns:1fr } }
+  </style>
+</head>
+<body>
+  {% include "landing/_nav.html" %}
+  <div class="wrap">
+    <h1>Harga sederhana — mulai dari 1 outlet</h1>
+    <p class="sub">Trial 14 hari gratis penuh. Tanpa kartu kredit. Lihat sendiri 3 masalah terbesar bisnis Anda — lalu putuskan.</p>
+    <div class="plans">
+      <div class="plan">
+        <h3>Pemula</h3>
+        <div class="price">Rp99rb<span class="per"> /bulan</span></div>
+        <ul>
+          <li>1 outlet</li>
+          <li>AI Advisor — 3 prioritas harian</li>
+          <li>Dashboard & semua review</li>
+          <li>Export CSV / XLSX</li>
+          <li>Update review mingguan</li>
+        </ul>
+        <a href="/auth/register" class="buy ghost">Mulai Gratis</a>
+      </div>
+      <div class="plan popular">
+        <h3>Pro</h3>
+        <div class="price">Rp299rb<span class="per"> /bulan</span></div>
+        <ul>
+          <li>Hingga 5 outlet</li>
+          <li>AI Advisor lengkap + PIC per masalah</li>
+          <li>Perbandingan cabang (1 vs 1 & per kota)</li>
+          <li>Masalah spesifik — bukan label umum</li>
+          <li>Email monitoring mingguan</li>
+          <li>Export lengkap</li>
+        </ul>
+        <a href="/auth/register" class="buy primary">Coba Gratis 14 Hari</a>
+      </div>
+      <div class="plan">
+        <h3>Premium</h3>
+        <div class="price">Rp799rb<span class="per"> /bulan</span></div>
+        <ul>
+          <li>Outlet tanpa batas</li>
+          <li>Semua fitur Pro</li>
+          <li>Prioritas dukungan (chat langsung)</li>
+          <li>Onboarding dibantu tim GRM</li>
+          <li>Custom report & analisis</li>
+        </ul>
+        <a href="/auth/register" class="buy ghost">Mulai Gratis</a>
+      </div>
+    </div>
+    <p class="note">Harga indikatif — keputusan final pada sprint tersendiri. Tidak ada biaya tersembunyi.</p>
+    <div class="faq-mini">
+      <h3>Pertanyaan seputar harga</h3>
+      <details><summary>Apakah benar-benar gratis 14 hari?</summary><p>Ya — akses penuh semua fitur Pro selama 14 hari. Tanpa kartu kredit, tanpa trik. Setelah 14 hari: pilih lanjut berbayar atau data Anda tetap tersimpan (read-only) sampai Anda siap.</p></details>
+      <details><summary>Bisa ganti paket kapan saja?</summary><p>Tentu — upgrade/downgrade kapan saja. Selisih biaya dihitung otomatis. Tidak ada penalti.</p></details>
+      <details><summary>Apakah ada biaya setup?</summary><p>Tidak. Setup sendiri 2 menit — atau kami bantu langsung (Paket Premium).</p></details>
+    </div>
+  </div>
+  {% include "landing/_footer.html" %}
+</body>
+</html>
