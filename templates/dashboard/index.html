@@ -29,6 +29,35 @@
   .alert-banner { border-radius:12px; padding:12px 16px; margin-bottom:16px; font-size:14px; display:flex; align-items:center; gap:10px }
 </style>
 
+<!-- PERIOD SELECTOR -->
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+  <label style="font-size:13px;color:var(--muted)">Periode:</label>
+  <select id="period" onchange="applyPeriod()" style="padding:8px 12px;border-radius:8px;border:1px solid var(--line);font-size:14px">
+    <option value="all" {{ 'selected' if not request.args.get('days') and not request.args.get('month') and not request.args.get('start') else '' }}>Semua Waktu</option>
+    <option value="7" {{ 'selected' if request.args.get('days') == '7' else '' }}>7 hari terakhir</option>
+    <option value="30" {{ 'selected' if request.args.get('days') == '30' else '' }}>30 hari terakhir</option>
+    <option value="90" {{ 'selected' if request.args.get('days') == '90' else '' }}>90 hari terakhir</option>
+    <option value="month" {{ 'selected' if request.args.get('month') else '' }}>Bulan tertentu…</option>
+    <option value="custom" {{ 'selected' if request.args.get('start') else '' }}>Rentang tanggal…</option>
+  </select>
+  <input id="p-month" type="month" value="{{ request.args.get('month') or '' }}" onchange="applyPeriod()" style="display:{{ 'inline-block' if request.args.get('month') else 'none' }};padding:8px;border-radius:8px;border:1px solid var(--line);font-size:14px">
+  <input id="p-start" type="date" value="{{ request.args.get('start') or '' }}" onchange="applyPeriod()" style="display:{{ 'inline-block' if request.args.get('start') else 'none' }};padding:8px;border-radius:8px;border:1px solid var(--line);font-size:14px">
+  <input id="p-end" type="date" value="{{ request.args.get('end') or '' }}" onchange="applyPeriod()" style="display:{{ 'inline-block' if request.args.get('start') else 'none' }};padding:8px;border-radius:8px;border:1px solid var(--line);font-size:14px">
+  <span style="font-size:13px;color:var(--muted)">· menampilkan: <strong>{{ period_label }}</strong></span>
+</div>
+<script>
+function applyPeriod() {
+  const v = document.getElementById('period').value;
+  const m = document.getElementById('p-month');
+  const s = document.getElementById('p-start');
+  const e = document.getElementById('p-end');
+  if (v === 'month') { m.style.display = 'inline-block'; s.style.display = 'none'; e.style.display = 'none'; if (m.value) location = '/dashboard/?month=' + m.value; return; }
+  if (v === 'custom') { s.style.display = 'inline-block'; e.style.display = 'inline-block'; m.style.display = 'none'; if (s.value && e.value) location = '/dashboard/?start=' + s.value + '&end=' + e.value; return; }
+  m.style.display = 'none'; s.style.display = 'none'; e.style.display = 'none';
+  location = '/dashboard/' + (v === 'all' ? '' : '?days=' + v);
+}
+</script>
+
 <!-- 8. ALERT & NOTIFICATION -->
 {% set alerts = advisor.issues | selectattr('priority','equalto','Mendesak') | list %}
 {% if alerts %}

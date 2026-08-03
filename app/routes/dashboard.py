@@ -21,11 +21,16 @@ bp = Blueprint('dashboard', __name__)
 @bp.route('/')
 @login_required
 def index():
-    """Owner dashboard — M2 simplified view (15-second read)."""
+    """Owner dashboard — UX redesign (all-time default; period selector).
+
+    First-time users see ALL reviews since the first one; afterwards they
+    pick a specific period (7/30/90 days, a month, or a custom range).
+    """
     business = current_user.business
     if not business:
         return render_template('dashboard/index.html', business=None, stats=None,
-                               summary=None, advisor=None, outlets=None, new_this_week=0)
+                               summary=None, advisor=None, outlets=None, new_this_week=0,
+                               period_label="Semua Waktu")
 
     from app.models.entities import Review, SyncReport
     from app import db as _db
@@ -37,7 +42,18 @@ def index():
     from datetime import datetime, timedelta, timezone
     from sqlalchemy import func
 
-    f = parse_filters({'days': '30'})
+    # Period from query params (days / month / start-end); default = ALL TIME
+    f = parse_filters(request.args)
+    if f.get("month"):
+        period_label = f"Bulan {f['month']}"
+    elif f.get("start") and f.get("end"):
+        period_label = f"{f['start'].date().isoformat()} s/d {f['end'].date().isoformat()}"
+    elif f.get("days"):
+        period_label = f"{f['days']} hari terakhir"
+    else:
+        f["start"] = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        period_label = "Semua Waktu"
+
     summary = executive_summary(business.tenant_id, business.id, f)
     advisor = advisor_generate(business.tenant_id, business.id, f)
     categories = category_breakdown(business.tenant_id, business.id, f)
@@ -45,18 +61,17 @@ def index():
     period = period_analytics(business.tenant_id, business.id, f)
     latest = review_explorer(business.tenant_id, business.id, f, page=1, per_page=5)
 
-    # Star distribution (30d) from real data
-    week_start_dt = datetime.now(timezone.utc) - timedelta(days=30)
-    star_rows = (
-        _db.session.query(Review.star_rating, func.count())
-        .filter(
-            Review.tenant_id == business.tenant_id,
-            Review.business_id == business.id,
-            Review.create_time >= week_start_dt,
-        )
-        .group_by(Review.star_rating)
-        .all()
+    # Star distribution (current period) from real data
+    start_dt = f.get("start") or (datetime.now(timezone.utc) - timedelta(days=30))
+    end_dt = f.get("end")
+    star_q = _db.session.query(Review.star_rating, func.count()).filter(
+        Review.tenant_id == business.tenant_id,
+        Review.business_id == business.id,
+        Review.create_time >= start_dt,
     )
+    if end_dt:
+        star_q = star_q.filter(Review.create_time <= end_dt)
+    star_rows = star_q.group_by(Review.star_rating).all()
     star_dist = {r: c for r, c in star_rows if r is not None}
 
     outlets = Outlet.query.filter_by(
@@ -105,7 +120,7 @@ def index():
     }
     return render_template('dashboard/index.html', business=business, stats=stats,
                            summary=summary, advisor=advisor, outlets=outlet_data,
-                           new_this_week=new_this_week,
+                           new_this_week=new_this_week, period_label=period_label,
                            categories=categories, branches=branches,
                            period=period, latest=latest, star_dist=star_dist)
 
