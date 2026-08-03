@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRM — Pantau Review Bisnis Anda</title>
+  <style>
+    * { box-sizing:border-box }
+    body { margin:0; font-family:Inter,system-ui,-apple-system,sans-serif; background:#fff; color:#111827 }
+    .hero { max-width:720px; margin:0 auto; padding:64px 20px 40px; text-align:center }
+    .logo { font-weight:800; font-size:22px } .logo span { color:#ff7a00 }
+    .hero h1 { font-size:34px; margin:16px 0 10px; line-height:1.2 }
+    .hero p { font-size:17px; color:#6b7280; margin:0 0 26px }
+    .btn { display:inline-block; padding:12px 28px; border-radius:10px; font-weight:700; font-size:15px; text-decoration:none }
+    .btn-primary { background:#ff7a00; color:#fff }
+    .btn-ghost { background:#f3f4f6; color:#111827; margin-left:10px }
+    .section { max-width:720px; margin:0 auto; padding:28px 20px }
+    .section h2 { font-size:20px; margin:0 0 14px }
+    .steps { display:grid; gap:12px }
+    .step { display:flex; gap:14px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px }
+    .step .n { width:30px; height:30px; border-radius:99px; background:#ff7a00; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0 }
+    .step .t { font-weight:700; font-size:15px } .step .d { font-size:14px; color:#6b7280 }
+    .footer { text-align:center; padding:40px 20px; font-size:13px; color:#9ca3af }
+    .footer a { color:#9ca3af; text-decoration:none; margin:0 8px }
+    @media (max-width:520px) { .hero h1 { font-size:26px } }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="logo">GRM<span>.</span></div>
+    <h1>Pantau review bisnis Anda, setiap hari.</h1>
+    <p>GRM mengumpulkan review publik dari Google Maps, merangkum masalah terbesar, dan memberi tahu siapa yang harus menindaklanjuti — tanpa login Google Business Profile.</p>
+    <a href="/auth/login" class="btn btn-primary">Login</a>
+    <a href="/guide" class="btn btn-ghost">Lihat Panduan</a>
+  </div>
+
+  <div class="section">
+    <h2>Bagaimana cara kerjanya?</h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div><div class="t">Temukan outlet Anda</div><div class="d">Masukkan nama bisnis — kami cari lokasinya di Google Maps.</div></div></div>
+      <div class="step"><div class="n">2</div><div><div class="t">Sinkronkan review</div><div class="d">Ambil review publik terbaru secara otomatis.</div></div></div>
+      <div class="step"><div class="n">3</div><div><div class="t">Lihat prioritas perbaikan</div><div class="d">Dapatkan 3 masalah terbesar + siapa yang harus mengerjakan.</div></div></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="/guide">Panduan</a> · <a href="/help">Bantuan</a> · <a href="/about">Tentang</a>
+    <div style="margin-top:8px">GRM v{{ version }} {{ release }}</div>
+  </div>
+</body>
+</html>

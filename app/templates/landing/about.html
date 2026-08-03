@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tentang — GRM</title>
+  <style>
+    * { box-sizing:border-box } body { margin:0; font-family:Inter,system-ui,sans-serif; background:#f9fafb; color:#111827 }
+    .wrap { max-width:600px; margin:0 auto; padding:40px 20px }
+    h1 { font-size:24px } .logo { font-weight:800; font-size:20px; margin-bottom:4px } .logo span { color:#ff7a00 }
+    .row { display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid #e5e7eb; font-size:14px }
+    .row .k { color:#6b7280 } .row .v { font-weight:600 }
+    .top { text-align:right; margin-bottom:16px } .top a { color:#ff7a00; text-decoration:none; font-size:14px }
+    .desc { color:#6b7280; font-size:14px; margin:14px 0 24px }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top"><a href="/">← Beranda</a></div>
+    <div class="logo">GRM<span>.</span></div>
+    <p class="desc">Google Review Monitoring — pantau review publik, temukan masalah pelanggan, dan ambil tindakan. Dibuat untuk owner restoran tanpa perlu keahlian teknis.</p>
+
+    <div class="row"><span class="k">Versi aplikasi</span><span class="v">{{ version }} ({{ release }})</span></div>
+    <div class="row"><span class="k">Build</span><span class="v">{{ version }}.0</span></div>
+    <div class="row"><span class="k">Deployment date</span><span class="v">{{ deployed_at }}</span></div>
+    <div class="row"><span class="k">Provider review</span><span class="v">Public Google Maps (Apify)</span></div>
+    <div class="row"><span class="k">Mode</span><span class="v">Non-login (tanpa Google Business Profile)</span></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bantuan — GRM</title>
+  <style>
+    * { box-sizing:border-box } body { margin:0; font-family:Inter,system-ui,sans-serif; background:#f9fafb; color:#111827 }
+    .wrap { max-width:680px; margin:0 auto; padding:40px 20px }
+    h1 { font-size:24px } .sub { color:#6b7280; font-size:15px; margin-bottom:24px }
+    details { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; margin-bottom:10px }
+    summary { font-weight:700; font-size:15px; cursor:pointer }
+    details p { font-size:14px; color:#6b7280; margin:10px 0 0 }
+    .top { text-align:right; margin-bottom:16px } .top a { color:#ff7a00; text-decoration:none; font-size:14px }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top"><a href="/">← Beranda</a></div>
+    <h1>Bantuan (FAQ)</h1>
+    <p class="sub">Jawaban singkat untuk pertanyaan umum.</p>
+
+    <details open>
+      <summary>Sinkronisasi berapa lama?</summary>
+      <p>Biasanya 20–60 detik. GRM mengambil review dari Google Maps lalu menganalisisnya secara otomatis. Anda akan melihat progres di layar.</p>
+    </details>
+    <details>
+      <summary>Mengapa review belum muncul?</summary>
+      <p>Pastikan sinkronisasi selesai (tanda ✅). Review diambil maksimal 50–100 terbaru. Jika masih kosong, coba "Sinkronisasi Penuh".</p>
+    </details>
+    <details>
+      <summary>Apa itu Incremental Sync (Sinkronisasi Bertahap)?</summary>
+      <p>Mode yang hanya mengambil review BARU sejak sinkronisasi terakhir — lebih cepat dan tidak mengulang. "Sinkronisasi Penuh" mengambil ulang dari awal untuk memastikan data lengkap.</p>
+    </details>
+    <details>
+      <summary>Apa arti "Prioritas Hari Ini"?</summary>
+      <p>Masalah terbesar yang ditemukan dari review pelanggan hari/periode ini. Ini hal pertama yang sebaiknya Anda tangani.</p>
+    </details>
+    <details>
+      <summary>Apa arti PIC?</summary>
+      <p>PIC = Penanggung Jawab. Siapa yang sebaiknya menangani masalah: Crew Outlet (pelayanan), Supervisor (alur/waktu tunggu), Kitchen/Chef (rasa & porsi), atau Owner (kebijakan umum).</p>
+    </details>
+  </div>
+</body>
+</html>
