@@ -217,10 +217,10 @@ function applyPeriod() {
   <div class="review-item">
     <div style="color:#f59e0b;font-size:13px;min-width:60px">{% for i in range(it.rating) %}★{% endfor %}{% for i in range(5 - it.rating) %}☆{% endfor %}</div>
     <div style="flex:1">
-      <div style="font-size:14px">{{ it.snippet or '<em style="color:#9ca3af">rating only</em>' }}</div>
+      <div style="font-size:14px">{% if it.snippet %}{{ it.snippet }}{% else %}<em style="color:#9ca3af">rating only</em>{% endif %}</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px">{{ it.reviewer }} · {{ it.date[:10] if it.date }} · {{ it.branch }}</div>
     </div>
-    <span style="font-size:11px;color:var(--muted);align-self:center">{{ it.sentiment }}</span>
+    <span style="font-size:11px;color:var(--muted);align-self:center">{% if it.sentiment == 'not_applicable' %}—{% else %}{{ it.sentiment }}{% endif %}</span>
   </div>
   {% endfor %}
   {% else %}<div style="color:var(--muted);font-size:13px">Belum ada review.</div>{% endif %}
