@@ -43,4 +43,4 @@ Tidak ada perubahan logic/DB/AI/provider/analytics/discovery.
 
 ## Commit
 
-- `<commit>` (diisi setelah commit) · working tree: `<tree>`
+- `d3e699e` feat: polish dashboard information hierarchy (M2.1) · working tree: clean
