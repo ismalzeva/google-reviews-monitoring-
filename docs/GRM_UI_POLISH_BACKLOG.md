@@ -162,3 +162,33 @@ Ditunda setelah GRM-003 selesai. Semua item non-kritikal.
 - Semua item independent dari GRM-002 s/d GRM-024
 - Bisa dikerjakan kapan saja setelah MVP tercapai
 - Tidak satu pun memengaruhi Core Platform
+
+---
+
+## GRM-005: Public API Polish 
+
+Ditunda setelah GRM-005 selesai. Semua item non-kritikal, dari feedback Ismal.
+
+### POL-025: Cache TTL + last_synced_at
+- **Area:** /api/public/preview response
+- **Issue:** Cache 24 jam terlalu lama untuk preview publik; perlu lebih segar + transparansi kapan terakhir sync
+- **Fix:** Ubah `_cache_ttl` ke 1800 (30 menit) atau 3600 (60 menit); tambahkan `last_synced_at` field di JSON response; invalidasi cache setelah sync event dari provider
+- **Estimasi:** 0.5 jam
+
+### POL-026: Analytics funnel events
+- **Area:** `_track_event()` di public_api.py
+- **Issue:** Hanya track `preview_started` + `preview_not_found`; butuh funnel lengkap
+- **Fix:** Tambah `preview_finished` (setelah data dirender penuh), `register_clicked` (CTA dari preview), `trial_started` (dari GRM-006 registration_completed bisa di-correlate)
+- **Estimasi:** 0.5 jam
+
+### POL-027: Branch selector — top 5 + total count
+- **Area:** `_branch_list()` di public_api.py
+- **Issue:** Saat ini return semua branch tanpa batas; kalau 50+ cabang, response jadi besar
+- **Fix:** Batasi 5 + tambahkan field `total_branches: int` di response
+- **Estimasi:** 0.25 jam
+
+### POL-028: Unknown place — estimated_ready_time
+- **Area:** 202 response untuk unknown place_id  
+- **Issue:** Saat ini `retry_after_seconds` hardcode 300; user tidak tahu kapan data siap
+- **Fix:** Tambahkan `estimated_ready_at` (ISO timestamp), hitung dari `now + estimated_fetch_seconds`; logika: jika ada di queue → estimasi dari posisi antrian, jika tidak → 300
+- **Estimasi:** 0.5 jam
