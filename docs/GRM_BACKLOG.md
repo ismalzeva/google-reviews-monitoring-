@@ -157,7 +157,7 @@ Memungkinkan visitor mencari bisnis NYATA sendiri dan melihat preview analisis �
 - **Dependency:** GRM-003
 - **Priority:** P0
 - **Estimasi:** L
-- **Status:** Todo
+- **Status:** Done
 
 #### GRM-005: Public Preview Analytics Service
 
@@ -677,7 +677,7 @@ Melacak ketergantungan provider eksternal per issue — roadmap migrasi mock →
 | GRM-001 | Done | N/A | Static HTML, tidak ada provider eksternal |
 | GRM-002 | Done | N/A | Static HTML, tidak ada provider eksternal |
 | GRM-003 | Done | Mock | `app/services/discovery.py` — `search_places()` mock data Bubur Fay 7 cabang (TAG: mock_adapter). Target production: Google Places API / Apify Google Search scraper |
-| GRM-004 | Todo | Mock → Apify | Public preview dari data review publik. AC: "Sumber data: Apify public review (crawler)". Fase MVP: mock data dulu |
+| GRM-004 | Done | Mock → Apify | Public preview dari data review publik. Fase MVP: mock data (6 branches, distribusi+issue+AI teaser unik per branch) |
 | GRM-005 | Todo | Mock → Apify | Backend analytics service. AC: output JSON dari data review. Fase MVP: mock |
 | GRM-006 | Todo | Internal | Registration 2-step wizard — internal DB, tidak ada provider eksternal |
 | GRM-007+ | Todo | Apify | Discovery & multi-city crawl — Google Places API / Apify Google Maps scraper |
