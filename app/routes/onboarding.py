@@ -279,6 +279,7 @@ def sync():
                     adapter=adapter,
                     source=getattr(adapter, "source_name", "provider"),
                     full_sync=(mode == "full"),
+                    sort=("lowestRanking" if mode == "negatif" else "newest"),
                 )
                 progress["stage"] = "analyzing"
                 progress["received"] = rep.get("reviews_received", 0)

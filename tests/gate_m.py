@@ -95,8 +95,20 @@ class FakeResp:
 
 def make_fake_http(items=None, fail_run_status=None, run_status_code=200,
                    dataset_status=200, run_calls=None):
-    """Stub for requests.request implementing the Apify actor flow."""
+    """Stub for requests.request implementing the Apify actor flow.
+
+    The crawler collector returns a place dict whose ``reviews`` field holds
+    the review items (matches real crawler-google-places output).
+    """
     items = items if items is not None else FIXTURE_ITEMS
+    place = {
+        "title": "Bubur Fay Depok",
+        "placeId": PLACE,
+        "reviews": items,
+        "totalScore": 4.5,
+        "reviewsCount": len(items),
+        "address": "Jl. Raya Depok No. 21, Kota Depok, Jawa Barat",
+    }
     state = {"post": 0, "poll": 0, "dataset": 0, "discovery": 0}
 
     def fake_request(method, url, params=None, headers=None, json=None, timeout=None):
@@ -117,11 +129,7 @@ def make_fake_http(items=None, fail_run_status=None, run_status_code=200,
                 return FakeResp(status_code=dataset_status)
             offset = int((params or {}).get("offset", 0))
             limit = int((params or {}).get("limit", 1000))
-            return FakeResp(json_data=items[offset:offset + limit])
-        if method == "POST" and "/acts/" in url and "/runs" in url and "crawler-google-places" in url:
-            state["discovery"] += 1
-            return FakeResp(json_data={"data": {"id": "run-d", "status": "RUNNING",
-                                                "defaultDatasetId": "ds-d"}})
+            return FakeResp(json_data=[place][offset:offset + limit])
         raise AssertionError(f"unexpected HTTP call: {method} {url}")
 
     fake_request.state = state
@@ -368,7 +376,7 @@ class TestDataset(GateMBase):
         with mock.patch("app.adapters.apify_public_review_adapter.requests.request", fake):
             items = a.list_reviews_by_place_id(PLACE, limit=5000)
         self.assertEqual(len(items), 1500)
-        self.assertGreater(fake.state["dataset"], 1)
+        self.assertGreaterEqual(fake.state["dataset"], 1)  # crawler returns all in one dataset item
 
     def test_repeated_page_guard(self):
         # stub returns same page regardless of offset → adapter must stop

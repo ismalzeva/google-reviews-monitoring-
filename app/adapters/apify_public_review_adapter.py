@@ -296,49 +296,88 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
         }
 
     def _reviews_for_place(self, place_id: str, since: Optional[str] = None) -> list:
-        """Run the review actor once per (place_id, since); cache per instance."""
+        """Collect reviews via crawler-google-places (exposes ALL reviews).
+
+        Research (2026-08-03): google-maps-reviews-scraper only exposes 100
+        reviews regardless of sort; crawler-google-places returns every review
+        (e.g. 438) when maxReviews is large enough — including negative ones.
+        Fallback to the review actor if crawler is unavailable.
+        """
         _is_placeholder_place_id(place_id) and self._reject_placeholder(place_id)
         cache_key = (place_id, since)
         if cache_key in self._run_cache:
             return self._run_cache[cache_key]
 
-        input_body = {
-            "placeIds": [place_id],
-            "maxReviews": self.max_reviews,
-            "reviewsSort": "newest",
-        }
-        if since:
-            # Actor expects absolute date YYYY-MM-DD (ISO with timezone → HTTP 400)
-            input_body["reviewsStartDate"] = str(since)[:10]
-        run = self._run_actor(self.review_actor_id, input_body)
-        dataset_id = run.get("defaultDatasetId")
-        if not dataset_id:
-            raise ApifyError("apify run missing defaultDatasetId", code="NO_DATASET")
-
         collected_at = _utc_now().isoformat()
+        run = None
         items = []
-        offset = 0
-        seen = set()
-        while True:
-            page = self._get_dataset_items(dataset_id, offset=offset, limit=1000)
-            if not page:
-                break
-            dict_items = [i for i in page if isinstance(i, dict)]
-            page_ids = {i.get("reviewId") for i in dict_items if i.get("reviewId")}
-            if page_ids and page_ids.issubset(seen):
-                break  # no-progress guard
-            seen.update(page_ids)
-            for item in dict_items:
-                items.append(
-                    self._normalize_item(place_id, item, run.get("id"), dataset_id, collected_at)
-                )
-            if len(page) < 1000:
-                break
-            offset += len(page)
+        try:
+            input_body = {
+                "searchStringsArray": [f"place_id:{place_id}"],
+                "maxCrawledPlacesPerSearch": 1,
+                "maxReviews": max(self.max_reviews, 100),
+                "language": "id",
+            }
+            run = self._run_actor(self.discovery_actor_id, input_body)
+            dataset_id = run.get("defaultDatasetId")
+            if not dataset_id:
+                raise ApifyError("crawler run missing dataset", code="NO_DATASET")
+            page = self._get_dataset_items(dataset_id, offset=0, limit=1000)
+            for item in page:
+                if not isinstance(item, dict):
+                    continue
+                for rv in (item.get("reviews") or []):
+                    if isinstance(rv, dict):
+                        items.append(
+                            self._normalize_item(place_id, rv, run.get("id"), dataset_id, collected_at)
+                        )
+        except ApifyError as exc:
+            if exc.code in ("AUTH_FAILED",):
+                raise  # credential problem — fallback would fail the same way
+            # Fallback: dedicated review actor (max 100)
+            logger.warning("crawler collector failed for %s — falling back to review actor", place_id)
+            input_body = {
+                "placeIds": [place_id],
+                "maxReviews": self.max_reviews,
+                "reviewsSort": "newest",
+            }
+            if since:
+                input_body["reviewsStartDate"] = str(since)[:10]
+            run = self._run_actor(self.review_actor_id, input_body)
+            dataset_id = run.get("defaultDatasetId")
+            if not dataset_id:
+                raise ApifyError("apify run missing defaultDatasetId", code="NO_DATASET")
+            offset = 0
+            seen = set()
+            while True:
+                page = self._get_dataset_items(dataset_id, offset=offset, limit=1000)
+                if not page:
+                    break
+                dict_items = [i for i in page if isinstance(i, dict)]
+                page_ids = {i.get("reviewId") for i in dict_items if i.get("reviewId")}
+                if page_ids and page_ids.issubset(seen):
+                    break
+                seen.update(page_ids)
+                for item in dict_items:
+                    items.append(
+                        self._normalize_item(place_id, item, run.get("id"), dataset_id, collected_at)
+                    )
+                if len(page) < 1000:
+                    break
+                offset += len(page)
 
-        items.sort(key=lambda x: x["review_date"] or "", reverse=True)
-        self._run_cache[cache_key] = items
-        return items
+        # Dedup locally by source_review_id (crawler may repeat)
+        seen_ids = set()
+        unique = []
+        for it in items:
+            if it["source_review_id"] in seen_ids:
+                continue
+            seen_ids.add(it["source_review_id"])
+            unique.append(it)
+
+        unique.sort(key=lambda x: x["review_date"] or "", reverse=True)
+        self._run_cache[cache_key] = unique
+        return unique
 
     def _reject_placeholder(self, place_id: str):
         raise ApifyError(

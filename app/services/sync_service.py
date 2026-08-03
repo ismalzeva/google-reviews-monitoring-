@@ -268,6 +268,7 @@ def sync_public_reviews(
     source: str = None,
     adapter=None,
     full_sync: bool = False,
+    sort: str = None,
 ) -> dict:
     """Public-mode review sync using a :class:`PublicReviewSourceAdapter`.
 
@@ -382,7 +383,8 @@ def sync_public_reviews(
             seen_ids = set()
             while True:
                 reviews = adapter.list_reviews_by_place_id(
-                    place_id, since=since, limit=100, offset=offset
+                    place_id, since=since, limit=100, offset=offset,
+                    sort=sort or "newest",
                 )
                 if not reviews:
                     break
