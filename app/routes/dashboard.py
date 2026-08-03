@@ -21,20 +21,116 @@ bp = Blueprint('dashboard', __name__)
 @bp.route('/')
 @login_required
 def index():
-    """Main dashboard — redirect to intelligence view."""
+    """Owner dashboard — M2 simplified view (15-second read)."""
     business = current_user.business
     if not business:
-        return render_template('dashboard/index.html', business=None, stats=None)
+        return render_template('dashboard/index.html', business=None, stats=None,
+                               summary=None, advisor=None, outlets=None, new_this_week=0)
 
-    # Basic stats
-    stats = {
-        'outlets': Outlet.query.filter_by(business_id=business.id).count(),
-        'reviews': Review.query.filter_by(business_id=business.id).count(),
-        'issues_open': Issue.query.filter_by(business_id=business.id).filter(
-            Issue.status.notin_(['resolved', 'closed'])).count(),
+    from app.models.entities import Review, SyncReport
+    from app.services.public_analytics import parse_filters, executive_summary
+    from app.services.ai_advisor import generate as advisor_generate
+    from datetime import datetime, timedelta, timezone
+
+    f = parse_filters({'days': '30'})
+    summary = executive_summary(business.tenant_id, business.id, f)
+    advisor = advisor_generate(business.tenant_id, business.id, f)
+
+    outlets = Outlet.query.filter_by(
+        tenant_id=business.tenant_id, business_id=business.id, monitor_enabled=True
+    ).order_by(Outlet.name.asc()).all()
+
+    last_report = (
+        SyncReport.query.filter_by(tenant_id=business.tenant_id, business_id=business.id)
+        .order_by(SyncReport.created_at.desc()).first()
+    )
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    new_this_week = Review.query.filter(
+        Review.tenant_id == business.tenant_id,
+        Review.business_id == business.id,
+        Review.create_time >= week_ago,
+    ).count()
+
+    # Sentiment quick counts (30d)
+    counts = {
+        'positive': summary.get('positive', 0),
+        'neutral': summary.get('neutral', 0),
+        'negative': summary.get('negative', 0),
+        'total': summary.get('total_reviews', 0),
     }
 
-    return render_template('dashboard/index.html', business=business, stats=stats)
+    outlet_data = [
+        {
+            'id': o.id,
+            'name': o.name,
+            'rating': o.business_rating,
+            'review_count': o.business_review_count,
+            'city_regency': o.city_regency,
+            'district': o.district,
+            'last_sync': last_report.completed_at.isoformat() if last_report and last_report.completed_at else None,
+        }
+        for o in outlets
+    ]
+
+    stats = {
+        'outlets': len(outlets),
+        'reviews': counts['total'],
+        'new_this_week': new_this_week,
+        'positive': counts['positive'],
+        'neutral': counts['neutral'],
+        'negative': counts['negative'],
+    }
+    return render_template('dashboard/index.html', business=business, stats=stats,
+                           summary=summary, advisor=advisor, outlets=outlet_data,
+                           new_this_week=new_this_week)
+
+
+@bp.route('/outlets')
+@login_required
+def outlets_page():
+    """Owner outlet list — simple."""
+    business = current_user.business
+    if not business:
+        return render_template('dashboard/outlets.html', business=None, outlets=None)
+    from app.models.entities import SyncReport
+    from datetime import datetime, timezone
+    outlets = Outlet.query.filter_by(
+        tenant_id=business.tenant_id, business_id=business.id, monitor_enabled=True
+    ).order_by(Outlet.name.asc()).all()
+    last_report = (
+        SyncReport.query.filter_by(tenant_id=business.tenant_id, business_id=business.id)
+        .order_by(SyncReport.created_at.desc()).first()
+    )
+    data = [
+        {
+            'id': o.id,
+            'name': o.name,
+            'rating': o.business_rating,
+            'review_count': o.business_review_count,
+            'city_regency': o.city_regency,
+            'district': o.district,
+            'last_sync': last_report.completed_at.isoformat() if last_report and last_report.completed_at else None,
+        }
+        for o in outlets
+    ]
+    return render_template('dashboard/outlets.html', business=business, outlets=data)
+
+
+@bp.route('/reviews')
+@login_required
+def reviews_page():
+    """Owner reviews page — positive/neutral/negative tabs + filters."""
+    business = current_user.business
+    return render_template('dashboard/reviews.html', business=business)
+
+
+@bp.route('/settings')
+@login_required
+def settings_page():
+    """Owner settings — profile, integration, logout."""
+    business = current_user.business
+    return render_template('dashboard/settings.html', business=business,
+                           user=current_user)
 
 
 @bp.route('/intelligence')

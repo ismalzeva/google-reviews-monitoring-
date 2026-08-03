@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Outlet — GRM{% endblock %}
+{% block content %}
+<h1 style="font-size:20px;margin:0 0 4px">Outlet</h1>
+<p style="color:var(--muted);font-size:14px;margin:0 0 16px">Kelola outlet dan sinkronisasi review.</p>
+
+{% if not outlets %}
+<div class="card"><p style="color:var(--muted)">Belum ada outlet aktif. <a href="/onboarding/" style="color:var(--brand)">Tambah Outlet</a></p></div>
+{% else %}
+{% for o in outlets %}
+<div class="card" style="margin-bottom:12px">
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+    <div style="flex:1;min-width:200px">
+      <div style="font-weight:700;font-size:16px">{{ o.name }}</div>
+      <div style="font-size:13px;color:var(--muted)">{{ o.city_regency or '—' }}{% if o.district %} · {{ o.district }}{% endif %}</div>
+    </div>
+    <div style="font-size:13px">⭐ <strong>{{ o.rating or '—' }}</strong> · {{ o.review_count or '—' }} review</div>
+    <div style="font-size:12px;color:var(--muted)">Sync terakhir: {{ o.last_sync and o.last_sync[:10] or 'belum' }}</div>
+    <div style="display:flex;gap:8px;margin-left:auto">
+      <button class="btn btn-primary" style="padding:7px 14px;font-size:13px" onclick="syncOutlet('{{ o.id }}', this)">Sinkronisasi</button>
+      <a href="/dashboard/" class="btn btn-ghost" style="padding:7px 14px;font-size:13px">Dashboard</a>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<script>
+async function syncOutlet(id, btn) {
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Menunggu…';
+  const r = await fetch('/onboarding/sync', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({outlet_id: id, mode: 'incremental'})});
+  if (r.status !== 200) { alert('Gagal memulai sinkronisasi.'); btn.disabled = false; btn.textContent = old; return; }
+  const poll = async () => {
+    const s = await (await fetch('/onboarding/status?outlet_id=' + id)).json();
+    const p = s.progress;
+    if (p && p.done) {
+      btn.textContent = p.error ? 'Gagal' : 'Selesai ✓';
+      setTimeout(() => { btn.disabled = false; btn.textContent = old; location.reload(); }, 1200);
+    } else { btn.textContent = 'Sinkronisasi…'; setTimeout(poll, 2000); }
+  };
+  poll();
+}
+</script>
+{% endblock %}

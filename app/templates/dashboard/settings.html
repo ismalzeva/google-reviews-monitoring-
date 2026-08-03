@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Settings — GRM{% endblock %}
+{% block content %}
+<h1 style="font-size:20px;margin:0 0 16px">Settings</h1>
+
+<div class="card" style="margin-bottom:12px">
+  <div style="font-weight:700;margin-bottom:8px">Profile</div>
+  <div style="font-size:14px;color:var(--muted)">
+    {{ user.display_name }} · {{ user.email }}<br>
+    Peran: {{ user.role }}
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div style="font-weight:700;margin-bottom:8px">Integrasi</div>
+  <div style="font-size:14px;color:var(--muted)">
+    Provider review publik: <strong>{{ 'Apify' if business else '—' }}</strong><br>
+    Mode: non-login (tanpa Google Business Profile). OAuth/direct reply nonaktif.
+  </div>
+</div>
+
+<div class="card">
+  <div style="font-weight:700;margin-bottom:8px">Akun</div>
+  <a href="/auth/logout" class="btn btn-ghost" style="color:#dc2626">Logout</a>
+</div>
+{% endblock %}
