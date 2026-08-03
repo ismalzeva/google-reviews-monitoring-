@@ -131,4 +131,4 @@ Tidak direkomendasikan self-service penuh tanpa M1.
 
 ## COMMIT
 
-- commit: `<commit>` (diisi setelah commit) · working tree: `<tree>`
+- commit: `e1c5212` fix: correct post-deployment dashboard onboarding copy · working tree: clean
