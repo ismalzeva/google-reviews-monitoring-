@@ -138,7 +138,7 @@ Memungkinkan visitor mencari bisnis NYATA sendiri dan melihat preview analisis �
 - **Dependency:** GRM-001
 - **Priority:** P0
 - **Estimasi:** L
-- **Status:** Todo
+- **Status:** Done
 
 #### GRM-004: Public Preview Analysis Page
 
@@ -665,3 +665,35 @@ GRM-001 (Landing)
 ---
 
 STOP — Backlog selesai. Jangan implementasi apa pun.
+
+---
+
+## Implementation Status
+
+Melacak ketergantungan provider eksternal per issue — roadmap migrasi mock → production.
+
+| Issue | Status | Provider | Detail |
+|-------|--------|----------|--------|
+| GRM-001 | Done | N/A | Static HTML, tidak ada provider eksternal |
+| GRM-002 | Done | N/A | Static HTML, tidak ada provider eksternal |
+| GRM-003 | Done | Mock | `app/services/discovery.py` — `search_places()` mock data Bubur Fay 7 cabang (TAG: mock_adapter). Target production: Google Places API / Apify Google Search scraper |
+| GRM-004 | Todo | Mock → Apify | Public preview dari data review publik. AC: "Sumber data: Apify public review (crawler)". Fase MVP: mock data dulu |
+| GRM-005 | Todo | Mock → Apify | Backend analytics service. AC: output JSON dari data review. Fase MVP: mock |
+| GRM-006 | Todo | Internal | Registration 2-step wizard — internal DB, tidak ada provider eksternal |
+| GRM-007+ | Todo | Apify | Discovery & multi-city crawl — Google Places API / Apify Google Maps scraper |
+
+### Provider Legend
+
+- **N/A** — tidak ada dependency eksternal
+- **Mock** — data contoh / statis untuk MVP
+- **Internal** — database / sistem internal GRM
+- **Apify** — Apify actor (Google Maps scraper, Google Search scraper, dst)
+- **Google Places API** — Google Maps Places API (berbayar)
+- **Google Business Profile API** — GBP API untuk akses review own-business (OAuth)
+
+### Migration Path
+
+```
+Mock  ──→  Apify (public data)  ──→  Google Places API (production scale)
+                                      └─→ Google Business Profile API (own-business)
+```
