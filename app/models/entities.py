@@ -63,7 +63,9 @@ class Business(db.Model):
     country = db.Column(db.String(10), default='ID')
     timezone = db.Column(db.String(50), default='Asia/Jakarta')
     default_language = db.Column(db.String(10), default='id')
-    status = db.Column(db.String(50), default='active')  # active, suspended, deleted
+    status = db.Column(db.String(50), default='active')  # active, trialing, suspended, deleted
+    city = db.Column(db.String(100), nullable=True)
+    trial_ends_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 

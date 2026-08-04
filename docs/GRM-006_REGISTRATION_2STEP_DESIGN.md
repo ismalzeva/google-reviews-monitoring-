@@ -164,6 +164,13 @@ Saat ini visitor yang sudah melihat preview analisis bisnisnya tidak bisa langsu
 - [ ] **GRM-006-24** Template tidak melempar `UndefinedError: 'data' is undefined` (pre-existing bug — perbaikan di register.html)
 - [ ] **GRM-006-25** Mobile responsive: step indicator di atas, form full-width, tombol full-width
 
+### Usability (Ismal additions)
+- [ ] **GRM-006-26** **Register selesai <60 detik:** Dari buka /register sampai redirect /dashboard, user menyelesaikan kedua step dalam waktu <60 detik. Ukur: minimalkan jumlah field (5 total), tidak ada halaman loading intermediate, auto-login langsung redirect tanpa delay
+- [ ] **GRM-006-27** **Mobile-first:** Semua elemen form dirancang untuk layar 375px terlebih dahulu; desktop adalah scaling. Touch target ≥44px (WCAG), keyboard mobile menampilkan tipe input yang tepat (email keyboard, text keyboard, dll)
+- [ ] **GRM-006-28** **Wizard resume session:** Jika user menutup browser di Step 2, lalu kembali ke /register dalam waktu <10 menit — tampilkan Step 2 langsung (tidak suruh isi ulang Step 1). Data Step 1 sudah tersimpan di signed session
+- [ ] **GRM-006-29** **Tidak ada dead-end:** Setiap halaman wizard memiliki tombol navigasi eksplisit: Step 1 → [Lanjut] + [Sudah punya akun? Login]; Step 2 → [← Kembali] + [Mulai Coba Gratis] + [Batalkan]. Tombol "Batalkan" mengarah ke landing page
+- [ ] **GRM-006-30** **Progress indicator langkah 1/2:** Step indicator di atas form menampilkan "Langkah 1 dari 2" / "Langkah 2 dari 2" dengan visual progress bar atau step dots. Jelas bagi user di langkah mana mereka berada
+
 ---
 
 ## 3. Technical Notes (Implementation Guide)

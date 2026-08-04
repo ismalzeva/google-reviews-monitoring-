@@ -1,26 +1,430 @@
 {% extends "base.html" %}
-{% block title %}Daftar — Reviews Monitor{% endblock %}
+{% block title %}Daftar — GRM{% endblock %}
 {% block content %}
-<div class="auth-card">
-    <h2>Daftar Akun Baru</h2>
-    {% if errors %}
-    <div class="alert alert-error">
-        {% for e in errors %}<p>{{ e }}</p>{% endfor %}
+<style>
+    /* ─── Registration Wizard — Mobile-First ────────────── */
+    :root {
+        --orange: #FF7A00;
+        --orange-dark: #E56E00;
+        --bg: #0B0B0B;
+        --surface: #15171C;
+        --card: #1E2027;
+        --border: #2D2F36;
+        --text: #E4E4E7;
+        --muted: #A1A1AA;
+        --error: #EF4444;
+        --success: #22C55E;
+    }
+
+    .wizard-wrapper {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 16px;
+        background: var(--bg);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .wizard-card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 32px 24px 24px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    /* ─── Progress Indicator (AC-30) ────────────────────── */
+    .wizard-progress {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 28px;
+    }
+    .wizard-step-dot {
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; font-weight: 600;
+        transition: all 0.25s;
+    }
+    .wizard-step-dot.active { background: var(--orange); color: #fff; }
+    .wizard-step-dot.done { background: var(--success); color: #fff; }
+    .wizard-step-dot.inactive { background: var(--border); color: var(--muted); }
+
+    .wizard-step-line {
+        flex: 1; height: 2px;
+        background: var(--border);
+        transition: background 0.25s;
+    }
+    .wizard-step-line.done { background: var(--success); }
+
+    .wizard-step-label {
+        font-size: 12px; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+    .wizard-title {
+        font-size: 18px; font-weight: 700; color: var(--text);
+        margin-bottom: 20px;
+    }
+
+    /* ─── Form ──────────────────────────────────────────── */
+    .wizard-form { display: flex; flex-direction: column; gap: 16px; }
+
+    .field-group { display: flex; flex-direction: column; gap: 4px; }
+    .field-group label {
+        font-size: 13px; font-weight: 600; color: var(--text);
+    }
+    .field-group label .optional { font-weight: 400; color: var(--muted); font-size: 12px; }
+    .field-group input {
+        width: 100%; height: 48px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0 14px;
+        color: var(--text);
+        font-size: 15px;
+        font-family: inherit;
+        transition: border-color 0.15s;
+        outline: none;
+        box-sizing: border-box;
+    }
+    .field-group input:focus { border-color: var(--orange); }
+    .field-group input.error { border-color: var(--error); }
+    .field-error {
+        font-size: 12px; color: var(--error);
+        min-height: 16px;
+        animation: shake 0.3s ease;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-4px); }
+        75% { transform: translateX(4px); }
+    }
+
+    /* ─── Password hint ─────────────────────────────────── */
+    .password-hint {
+        font-size: 12px; color: var(--muted);
+        display: flex; align-items: center; gap: 6px;
+    }
+    .password-hint.valid { color: var(--success); }
+
+    /* ─── Buttons ───────────────────────────────────────── */
+    .wizard-buttons {
+        display: flex; gap: 10px; margin-top: 8px;
+    }
+    .btn-wizard {
+        flex: 1; height: 48px;
+        border: none; border-radius: 10px;
+        font-size: 15px; font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .btn-primary-wiz {
+        background: var(--orange); color: #fff;
+    }
+    .btn-primary-wiz:hover { background: var(--orange-dark); }
+    .btn-primary-wiz:disabled {
+        opacity: 0.4; cursor: not-allowed;
+    }
+    .btn-secondary-wiz {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+    }
+    .btn-secondary-wiz:hover { background: var(--surface); }
+    .btn-ghost-wiz {
+        background: transparent; color: var(--muted);
+        border: none; font-size: 13px; cursor: pointer;
+        text-decoration: none;
+    }
+
+    /* ─── Link bar ──────────────────────────────────────── */
+    .wizard-link {
+        text-align: center; margin-top: 16px;
+        font-size: 13px; color: var(--muted);
+    }
+    .wizard-link a {
+        color: var(--orange); text-decoration: none; font-weight: 600;
+    }
+    .wizard-link a:hover { text-decoration: underline; }
+
+    /* ─── Trial badges ──────────────────────────────────── */
+    .trial-badges {
+        display: flex; gap: 12px; flex-wrap: wrap;
+        margin: 8px 0 4px;
+    }
+    .trial-badge {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 12px; color: var(--success);
+        background: rgba(34,197,94,0.08);
+        padding: 6px 12px; border-radius: 8px;
+    }
+
+    /* ─── Mobile ────────────────────────────────────────── */
+    @media (max-width: 480px) {
+        .wizard-card {
+            border: none; border-radius: 0;
+            box-shadow: none; padding: 24px 16px;
+        }
+        .wizard-wrapper { padding: 16px 0; justify-content: flex-start; }
+    }
+</style>
+
+<div class="wizard-wrapper">
+    <div class="wizard-card">
+        <!-- AC-30: Progress Indicator -->
+        <div class="wizard-progress">
+            {% if step == 1 %}
+            <div class="wizard-step-dot active">1</div>
+            <div class="wizard-step-line"></div>
+            <div class="wizard-step-dot inactive">2</div>
+            {% else %}
+            <div class="wizard-step-dot done">✓</div>
+            <div class="wizard-step-line done"></div>
+            <div class="wizard-step-dot active">2</div>
+            {% endif %}
+            <span style="font-size:12px;color:var(--muted);margin-left:8px;">Langkah {{ step }} dari 2</span>
+        </div>
+
+        {% if step == 1 %}
+        <!-- ═══════ STEP 1: Buat Akun ═══════ -->
+        <div class="wizard-title">Buat Akun</div>
+
+        <form class="wizard-form" id="step1-form" method="POST" novalidate>
+            <input type="hidden" name="step" value="1">
+
+            <div class="field-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email"
+                       value="{{ email|default('') }}"
+                       placeholder="anda@email.com"
+                       inputmode="email" autocomplete="email" autofocus
+                       class="{{ 'error' if error and 'Email' in error }}">
+                <div class="field-error" id="email-error"></div>
+            </div>
+
+            <div class="field-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password"
+                       placeholder="Minimal 8 karakter"
+                       minlength="8" autocomplete="new-password"
+                       class="{{ 'error' if error and 'Password' in error }}">
+                <div class="password-hint" id="pw-hint">🔒 Minimal 8 karakter</div>
+                <div class="field-error" id="pw-error"></div>
+            </div>
+
+            <div class="field-group">
+                <label for="display_name">Nama Anda</label>
+                <input type="text" id="display_name" name="display_name"
+                       value="{{ display_name|default('') }}"
+                       placeholder="Nama lengkap"
+                       autocomplete="name"
+                       class="{{ 'error' if error and 'Nama' in error }}">
+                <div class="field-error" id="name-error"></div>
+            </div>
+
+            {% if error %}
+            <div class="field-error" style="text-align:center;min-height:0;">{{ error }}</div>
+            {% endif %}
+
+            <div class="wizard-buttons">
+                <!-- AC-29: always have forward + link -->
+                <button type="submit" class="btn-wizard btn-primary-wiz" id="step1-btn" disabled>
+                    Lanjut →
+                </button>
+            </div>
+        </form>
+
+        <div class="wizard-link">
+            Sudah punya akun? <a href="/auth/login">Login</a>
+        </div>
+
+        {% else %}
+        <!-- ═══════ STEP 2: Bisnis Anda ═══════ -->
+        <div class="wizard-title">Bisnis Anda</div>
+
+        <!-- Trial badges -->
+        <div class="trial-badges">
+            <div class="trial-badge">✅ 14 hari gratis</div>
+            <div class="trial-badge">✅ Tanpa kartu kredit</div>
+            <div class="trial-badge">✅ Langsung pakai</div>
+        </div>
+
+        <form class="wizard-form" id="step2-form" method="POST" novalidate style="margin-top:8px;">
+            <input type="hidden" name="step" value="2">
+
+            <div class="field-group">
+                <label for="brand_name">Nama Brand <span style="color:var(--error)">*</span></label>
+                <input type="text" id="brand_name" name="brand_name"
+                       value="{{ brand_name|default('') }}"
+                       placeholder="Contoh: Bubur Fay"
+                       autocomplete="organization" autofocus
+                       class="{{ 'error' if error and 'brand' in error|lower }}">
+                <div class="field-error" id="brand-error"></div>
+            </div>
+
+            <div class="field-group">
+                <label for="business_name">Nama Bisnis <span class="optional">(opsional)</span></label>
+                <input type="text" id="business_name" name="business_name"
+                       value="{{ business_name|default('') }}"
+                       placeholder="Nama legal usaha Anda"
+                       autocomplete="organization-title">
+            </div>
+
+            <div class="field-group">
+                <label for="city">Kota <span style="color:var(--error)">*</span></label>
+                <input type="text" id="city" name="city"
+                       value="{{ city|default('') }}"
+                       placeholder="Contoh: Jakarta"
+                       autocomplete="address-level2"
+                       class="{{ 'error' if error and 'Kota' in error }}">
+                <div class="field-error" id="city-error"></div>
+            </div>
+
+            {% if error and step == 2 %}
+            <div class="field-error" style="text-align:center;min-height:0;">{{ error }}</div>
+            {% endif %}
+
+            <div class="wizard-buttons">
+                <!-- AC-29: Back + Forward + Cancel — no dead-end -->
+                <button type="button" class="btn-wizard btn-secondary-wiz" id="back-btn">
+                    ← Kembali
+                </button>
+                <button type="submit" class="btn-wizard btn-primary-wiz" id="step2-btn">
+                    Mulai Coba Gratis →
+                </button>
+            </div>
+            <button type="button" class="btn-ghost-wiz" id="cancel-btn" style="width:100%;margin-top:4px;">
+                Batalkan
+            </button>
+        </form>
+
+        <div class="wizard-link">
+            Sudah punya akun? <a href="/auth/login">Login</a>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
-    <form method="POST">
-        <label>Nama Bisnis</label>
-        <input type="text" name="business_name" value="{{ data.get('business_name','') }}" required>
-        <label>Brand</label>
-        <input type="text" name="brand_name" value="{{ data.get('brand_name','') }}" required placeholder="Contoh: Bubur Fay">
-        <label>Nama Lengkap</label>
-        <input type="text" name="display_name" value="{{ data.get('display_name','') }}" required>
-        <label>Email</label>
-        <input type="email" name="email" value="{{ data.get('email','') }}" required>
-        <label>Password (min. 8 karakter)</label>
-        <input type="password" name="password" minlength="8" required>
-        <button type="submit" class="btn btn-primary">Daftar</button>
-    </form>
-    <p class="auth-link">Sudah punya akun? <a href="/auth/login">Login</a></p>
 </div>
+
+<script>
+// ─── Client-side validation ──────────────────────────────
+(function() {
+    {% if step == 1 %}
+    const emailEl = document.getElementById('email');
+    const pwEl = document.getElementById('password');
+    const nameEl = document.getElementById('display_name');
+    const btn = document.getElementById('step1-btn');
+    const pwHint = document.getElementById('pw-hint');
+
+    function validate() {
+        let valid = true;
+
+        // Email
+        const emailErr = document.getElementById('email-error');
+        if (!emailEl.value || !emailEl.value.includes('@')) {
+            emailErr.textContent = 'Email tidak valid';
+            emailEl.classList.add('error');
+            valid = false;
+        } else {
+            emailErr.textContent = '';
+            emailEl.classList.remove('error');
+        }
+
+        // Password
+        const pwErr = document.getElementById('pw-error');
+        if (!pwEl.value || pwEl.value.length < 8) {
+            pwErr.textContent = '';
+            pwHint.textContent = '🔒 Minimal 8 karakter';
+            pwHint.classList.remove('valid');
+            if (pwEl.value && pwEl.value.length > 0) {
+                pwEl.classList.add('error');
+            }
+            valid = false;
+        } else {
+            pwErr.textContent = '';
+            pwHint.textContent = '✅ Password valid';
+            pwHint.classList.add('valid');
+            pwEl.classList.remove('error');
+        }
+
+        // Name
+        const nameErr = document.getElementById('name-error');
+        if (!nameEl.value.trim()) {
+            nameErr.textContent = 'Nama wajib diisi';
+            nameEl.classList.add('error');
+            valid = false;
+        } else {
+            nameErr.textContent = '';
+            nameEl.classList.remove('error');
+        }
+
+        btn.disabled = !valid;
+        return valid;
+    }
+
+    emailEl.addEventListener('input', validate);
+    pwEl.addEventListener('input', validate);
+    nameEl.addEventListener('input', validate);
+
+    // Initial check
+    if (emailEl.value || pwEl.value || nameEl.value) { validate(); }
+
+    {% else %}
+    // Step 2
+    const brandEl = document.getElementById('brand_name');
+    const cityEl = document.getElementById('city');
+    const btn2 = document.getElementById('step2-btn');
+
+    function validateStep2() {
+        let valid = true;
+
+        const brandErr = document.getElementById('brand-error');
+        if (!brandEl.value.trim()) {
+            brandErr.textContent = 'Nama brand wajib diisi';
+            brandEl.classList.add('error');
+            valid = false;
+        } else {
+            brandErr.textContent = '';
+            brandEl.classList.remove('error');
+        }
+
+        const cityErr = document.getElementById('city-error');
+        if (!cityEl.value.trim()) {
+            cityErr.textContent = 'Kota wajib diisi';
+            cityEl.classList.add('error');
+            valid = false;
+        } else {
+            cityErr.textContent = '';
+            cityEl.classList.remove('error');
+        }
+
+        btn2.disabled = !valid;
+        return valid;
+    }
+
+    brandEl.addEventListener('input', validateStep2);
+    cityEl.addEventListener('input', validateStep2);
+
+    // Navigation
+    document.getElementById('back-btn').addEventListener('click', function() {
+        // Go back to step 1 with pre-filled data
+        window.location.href = '/auth/register?back=1';
+    });
+
+    document.getElementById('cancel-btn').addEventListener('click', function() {
+        window.location.href = '/';
+    });
+
+    validateStep2();
+    {% endif %}
+})();
+</script>
 {% endblock %}
