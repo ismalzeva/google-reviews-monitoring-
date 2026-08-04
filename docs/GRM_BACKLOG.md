@@ -211,7 +211,7 @@ Mengubah visitor yang sudah lihat preview → daftar → trial aktif dalam <3 me
 - **Dependency:** GRM-006
 - **Priority:** P0
 - **Estimasi:** M
-- **Status:** Todo
+- **Status:** Design ✅ (lihat `docs/GRM-007_TRIAL_ACTIVATION_DESIGN.md`)
 
 #### GRM-008: Onboarding Wizard
 
