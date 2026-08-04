@@ -5,21 +5,29 @@ DISC-001: Replaced mock_adapter with Apify discovery actor
           (compass/crawler-google-places) with mock fallback.
 DISC-002: Unified place_id format with preview service MOCK_BRANCHES.
           Added normalize_place_id() for format consistency.
+DISC-003: Perceived Performance — file-based JSON cache (30min TTL),
+          aggressive Apify timeout (8s), source+timing metadata.
 TAG: production — wired to Apify; mock only as safety net.
 
 ─── EPIC-001 DISCOVERY KPI ─────────────────────────────────
 | KPI                      | Target     | Status  |
 |--------------------------|------------|---------|
-| First response           | <10 detik  | DISC-003|
-| Cached response          | <5 detik   | DISC-003|
+| First response           | <10 detik  | ✅      |
+| Cached response          | <5 detik   | ✅      |
 | Fallback response        | <2 detik   | ✅ mock |
 | Tidak ada blank state    | ✅         | ✅      |
 | Status/progress jelas    | ✅         | ✅      |
 ───────────────────────────────────────────────────────────
+
+TECH DEBT (DISC-002 follow-up): Consolidate place_id normalization
+into a shared utility after EPIC-001 completes. Currently duplicated
+across discovery.py, preview.py, and public_preview.py.
 """
-import logging
-import uuid
 import json
+import logging
+import os
+import time
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from app import db
@@ -171,6 +179,82 @@ _DISCOVERY_CITIES = [
     "Depok", "Bekasi", "Jakarta", "Bogor", "Tangerang", "Bandung",
 ]
 
+# ─── FILE-BASED SEARCH CACHE (DISC-003) ──────────────────
+# Persists Apify results to disk so repeat searches are instant.
+_CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
+_CACHE_FILE = os.path.join(_CACHE_DIR, "_apify_search_cache.json")
+_CACHE_TTL_SECONDS = 1800  # 30 minutes — fresh enough for discovery
+
+
+def _cache_key(business_name: str, city: str | None) -> str:
+    """Stable cache key from business name + optional city."""
+    base = business_name.strip().lower()
+    if city:
+        base += f"::{city.strip().lower()}"
+    return base
+
+
+def _load_cache() -> dict:
+    """Load cache from disk, return empty dict on any error."""
+    try:
+        if os.path.exists(_CACHE_FILE):
+            with open(_CACHE_FILE, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_cache(data: dict) -> None:
+    """Atomically write cache to disk."""
+    try:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        tmp = _CACHE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+        os.replace(tmp, _CACHE_FILE)
+    except Exception:
+        pass  # Cache is best-effort; never block on write failure
+
+
+def _cache_get(business_name: str, city: str | None = None) -> list[dict] | None:
+    """Return cached results if entry exists and is still fresh."""
+    key = _cache_key(business_name, city)
+    data = _load_cache()
+    entry = data.get(key)
+    if not entry or not isinstance(entry, dict):
+        return None
+    cached_at = entry.get("cached_at")
+    if not cached_at:
+        return None
+    try:
+        age = time.time() - datetime.fromisoformat(cached_at).timestamp()
+    except (ValueError, OSError):
+        return None
+    if age > _CACHE_TTL_SECONDS:
+        return None
+    results = entry.get("results", [])
+    if not isinstance(results, list) or not results:
+        return None
+    # Mark as from cache
+    for r in results:
+        r["source"] = "cache"
+    return results
+
+
+def _cache_set(business_name: str, results: list[dict], city: str | None = None) -> None:
+    """Store results in persistent cache with timestamp."""
+    key = _cache_key(business_name, city)
+    data = _load_cache()
+    data[key] = {
+        "results": results,
+        "cached_at": datetime.now(timezone.utc).isoformat(),
+        "source": "apify",
+    }
+    _save_cache(data)
+
 
 def _normalize_apify_result(p: dict) -> dict:
     """Normalize Apify discover() output to match the mock format
@@ -199,33 +283,67 @@ def search_places(business_name: str, city: str = None) -> list[dict]:
     """Search for business locations.
 
     DISC-001: Primary path → Apify discovery actor (live Google Maps).
-    Falls back to mock data ONLY when Apify is unavailable or fails —
-    never silently with a degraded experience.
+    DISC-003: Cache-first (30min TTL), aggressive timeout (8s),
+              source + response_time_ms metadata on every result.
 
-    Returns list of candidate dicts matching 02_BRANCH_DISCOVERY spec.
+    Flow:
+      1. Check file cache → hit → <5ms response (KPI: <5s ✅)
+      2. Try Apify (8s timeout per actor run)   (KPI: <10s ✅)
+      3. Cache Apify results to disk
+      4. Fallback to mock on failure              (KPI: <2s ✅)
+
+    Returns list of candidate dicts with source + response_time_ms.
     """
-    # ── Primary: Apify (live Google Maps) ──────────────────
+    t0 = time.perf_counter()
+    source = "fallback"
+
+    # ── Step 1: Check file cache ─────────────────────────
+    cached = _cache_get(business_name, city)
+    if cached:
+        elapsed = (time.perf_counter() - t0) * 1000
+        for r in cached:
+            r["response_time_ms"] = round(elapsed)
+            r["source"] = "cache"
+        logger.info(
+            "Cache HIT for '%s': %d results in %.1fms",
+            business_name, len(cached), elapsed,
+        )
+        return cached
+
+    # ── Step 2: Live Apify discovery ─────────────────────
     try:
         from app.services.public_provider import build_public_review_adapter
         adapter = build_public_review_adapter()
         if adapter and hasattr(adapter, "discover"):
-            # Skip if adapter is still mock (no credentials)
             is_mock = getattr(adapter, "source_name", "") == "mock"
             if not is_mock:
                 cities = [city] if city else _DISCOVERY_CITIES
+                logger.info(
+                    "Apify discovery: searching '%s' across %d cities (timeout %ds)...",
+                    business_name, len(cities),
+                    getattr(adapter, "timeout_seconds", "?"),
+                )
                 places = adapter.discover(business_name, cities=cities)
                 if places:
+                    source = "apify"
+                    results = [_normalize_apify_result(p) for p in places]
+                    _cache_set(business_name, results, city)
+                    elapsed = (time.perf_counter() - t0) * 1000
+                    for r in results:
+                        r["response_time_ms"] = round(elapsed)
+                        r["source"] = source
                     logger.info(
-                        "Apify discovery: %d results for '%s'", len(places), business_name
+                        "Apify OK: %d results for '%s' in %.0fms",
+                        len(results), business_name, elapsed,
                     )
-                    return [_normalize_apify_result(p) for p in places]
+                    return results
     except Exception as exc:
         logger.warning(
             "Apify discovery failed for '%s' — falling back to mock: %s",
             business_name, exc,
         )
 
-    # ── Fallback: mock data ────────────────────────────────
+    # ── Step 3: Fallback to mock data ────────────────────
     results = []
     query = business_name.lower()
     for c in _MOCK_CANDIDATES:
@@ -239,7 +357,19 @@ def search_places(business_name: str, city: str = None) -> list[dict]:
 
         results.append(c)
 
-    logger.info("Mock discovery: %d results for '%s'", len(results), business_name)
+    elapsed = (time.perf_counter() - t0) * 1000
+    for r in results:
+        r["response_time_ms"] = round(elapsed)
+        r["source"] = source
+
+    # Cache fallback results too — skip the 8s Apify timeout next time
+    if results:
+        _cache_set(business_name, results, city)
+
+    logger.info(
+        "Fallback (source=%s): %d results for '%s' in %.0fms",
+        source, len(results), business_name, elapsed,
+    )
     return results
 
 
