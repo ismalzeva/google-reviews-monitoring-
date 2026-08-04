@@ -231,14 +231,67 @@ MOCK_BRANCHES: dict[str, MockPreview] = {
 }
 
 
+def normalize_place_id(place_id: str) -> str:
+    """Normalize a Google Place ID for consistent internal use.
+
+    DISC-002: Strips whitespace. Real Google Place IDs are opaque;
+    no semantic transform applied.
+    """
+    return (place_id or "").strip()
+
+
+def _try_alternate_format(place_id: str) -> Optional[str]:
+    """Try alternate underscore/hyphen variant if exact lookup fails.
+
+    Google Place IDs use underscores naturally (ChIJ0_xxx_yyy),
+    but mock entries use mixed format (ChIJ0_xxx-yyy-NNN).
+    Try multiple variants: prefix swap, all-underscore, all-hyphen.
+    """
+    # 1. Swap ChIJ prefix format (ChIJ0- ↔ ChIJ0_)
+    if place_id.startswith("ChIJ0-"):
+        alt = "ChIJ0_" + place_id[6:]
+        if alt in MOCK_BRANCHES:
+            return alt
+    elif place_id.startswith("ChIJ0_"):
+        alt = "ChIJ0-" + place_id[6:]
+        if alt in MOCK_BRANCHES:
+            return alt
+
+    # 2. All-underscore variant
+    alt_us = place_id.replace("-", "_")
+    if alt_us != place_id and alt_us in MOCK_BRANCHES:
+        return alt_us
+
+    # 3. All-hyphen variant
+    alt_hyp = place_id.replace("_", "-")
+    if alt_hyp != place_id and alt_hyp in MOCK_BRANCHES:
+        return alt_hyp
+
+    return None
+
+
 def get_preview_data(place_id: str) -> Optional[MockPreview]:
-    """Retrieve preview data for a place_id (cache-first)."""
+    """Retrieve preview data for a place_id (cache-first).
+
+    DISC-002: Falls back to alternate underscore/hyphen format
+    when exact lookup fails.
+    """
+    place_id = normalize_place_id(place_id)
+    if not place_id:
+        return None
+
     cached = _cache_get(place_id)
     if cached:
         logger.info("preview cache hit for %s", place_id)
         return MockPreview(**cached)
 
     mock = MOCK_BRANCHES.get(place_id)
+    if not mock:
+        alt_id = _try_alternate_format(place_id)
+        if alt_id:
+            mock = MOCK_BRANCHES.get(alt_id)
+            if mock:
+                logger.info("preview alt-format match: %s → %s", place_id, alt_id)
     if mock:
         _cache_set(place_id, {
             "place_id": mock.place_id,

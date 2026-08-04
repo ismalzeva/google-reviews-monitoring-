@@ -3,7 +3,19 @@
 RUN_02: Uses mock data since no Places API key configured.
 DISC-001: Replaced mock_adapter with Apify discovery actor
           (compass/crawler-google-places) with mock fallback.
+DISC-002: Unified place_id format with preview service MOCK_BRANCHES.
+          Added normalize_place_id() for format consistency.
 TAG: production — wired to Apify; mock only as safety net.
+
+─── EPIC-001 DISCOVERY KPI ─────────────────────────────────
+| KPI                      | Target     | Status  |
+|--------------------------|------------|---------|
+| First response           | <10 detik  | DISC-003|
+| Cached response          | <5 detik   | DISC-003|
+| Fallback response        | <2 detik   | ✅ mock |
+| Tidak ada blank state    | ✅         | ✅      |
+| Status/progress jelas    | ✅         | ✅      |
+───────────────────────────────────────────────────────────
 """
 import logging
 import uuid
@@ -22,7 +34,7 @@ logger = logging.getLogger(__name__)
 # SOURCE: manual research, not API. Tagged as mock.
 _MOCK_CANDIDATES = [
     {
-        "place_id": "ChIJ0-depok-margonda-001",
+        "place_id": "ChIJ0_depok-margonda-001",
         "display_name": "Bubur Fay Depok",
         "formatted_address": "Jl. Margonda Raya No. 88, Depok, Jawa Barat",
         "latitude": -6.3948,
@@ -37,7 +49,7 @@ _MOCK_CANDIDATES = [
         "search_region": "Depok",
     },
     {
-        "place_id": "ChIJ0-bekasi-grand-mall-002",
+        "place_id": "ChIJ0_bekasi-gm-003",
         "display_name": "Bubur Fay Bekasi",
         "formatted_address": "Grand Mall Bekasi, Lt. 1, Jl. Ahmad Yani No. 1, Bekasi",
         "latitude": -6.2475,
@@ -52,7 +64,7 @@ _MOCK_CANDIDATES = [
         "search_region": "Bekasi",
     },
     {
-        "place_id": "ChIJ0-jkt-pusat-003",
+        "place_id": "ChIJ0_jakarta-thamrin-004",
         "display_name": "Bubur Fay Jakarta Pusat",
         "formatted_address": "Jl. MH Thamrin No. 10, Jakarta Pusat, DKI Jakarta",
         "latitude": -6.1865,
@@ -67,7 +79,7 @@ _MOCK_CANDIDATES = [
         "search_region": "Jakarta",
     },
     {
-        "place_id": "ChIJ0-bogor-botani-004",
+        "place_id": "ChIJ0_bogor-botani-004",
         "display_name": "Bubur Fay Bogor",
         "formatted_address": "Botani Square, Lt. 2, Jl. Pajajaran, Bogor",
         "latitude": -6.6012,
@@ -82,7 +94,7 @@ _MOCK_CANDIDATES = [
         "search_region": "Bogor",
     },
     {
-        "place_id": "ChIJ0-tangerang-alam-sutera-005",
+        "place_id": "ChIJ0_tangerang-alsut-005",
         "display_name": "Bubur Fay Tangerang",
         "formatted_address": "Alam Sutera Town Center, Jl. Alam Sutera Boulevard, Tangerang",
         "latitude": -6.2219,
@@ -127,7 +139,7 @@ _MOCK_CANDIDATES = [
         "search_region": "Bogor",
     },
     {
-        "place_id": "ChIJ0-depok-margonda-001",  # Duplicate of #1
+        "place_id": "ChIJ0_official-depok-001",
         "display_name": "Bubur Fay Official Store Depok",
         "formatted_address": "Jl. Margonda Raya No. 88, Depok, Jawa Barat",
         "latitude": -6.3949,
@@ -170,6 +182,16 @@ def _normalize_apify_result(p: dict) -> dict:
         "phone": p.get("phone", ""),
         "website": p.get("website", ""),
     }
+
+
+def normalize_place_id(place_id: str) -> str:
+    """Normalize a Google Place ID for consistent internal use.
+
+    DISC-002: Ensures place_ids from Apify, mock, and preview all
+    use the same format. Strips whitespace; no semantic transformation
+    (real Google Place IDs are opaque strings).
+    """
+    return (place_id or "").strip()
 
 
 # ─── PRIMARY ADAPTER ─────────────────────────────────────

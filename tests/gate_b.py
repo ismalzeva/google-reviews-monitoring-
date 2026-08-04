@@ -119,7 +119,7 @@ def gate_b2_brand_search():
 
     # Fresh search via the mock adapter
     raw = search_places('Bubur Fay')
-    expected_count = 6  # 8 raw - 2 typos/duplicates after dedup
+    expected_count = 7  # all mock candidates now have unique place_ids (DISC-002)
 
     with app.test_client() as c:
         with c.session_transaction() as sess:

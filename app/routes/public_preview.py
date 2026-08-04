@@ -6,7 +6,7 @@ Menggunakan mock data dari app.services.preview (TAG: mock_data).
 
 from flask import Blueprint, render_template, request, redirect, url_for
 
-from app.services.preview import get_preview_data
+from app.services.preview import get_preview_data, normalize_place_id
 from app.services.discovery import search_places
 
 bp = Blueprint("public_preview", __name__, url_prefix="/preview")
@@ -15,7 +15,7 @@ bp = Blueprint("public_preview", __name__, url_prefix="/preview")
 @bp.route("", methods=["GET"])
 def preview_page():
     """Render public preview analysis page."""
-    place_id = request.args.get("place_id", "").strip()
+    place_id = normalize_place_id(request.args.get("place_id", ""))
     query = request.args.get("q", "").strip()
 
     if not place_id:
