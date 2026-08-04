@@ -34,6 +34,18 @@
     .empty .icon { font-size:48px; margin-bottom:16px }
     .empty h2 { font-size:22px; margin-bottom:8px }
     .empty p { color:var(--grm-muted); font-size:15px; max-width:400px; margin:0 auto 20px; line-height:1.6 }
+    /* Source status banner (DISC-004) */
+    .source-banner { display:flex; align-items:center; gap:8px; padding:10px 16px; border-radius:10px; font-size:13px; font-weight:500; margin-bottom:16px }
+    .source-banner.src-live { background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46 }
+    .source-banner.src-cache { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af }
+    .source-banner.src-fallback { background:#fffbeb; border:1px solid #fde68a; color:#92400e }
+    .source-banner.src-searching { background:#f0f9ff; border:1px solid #bae6fd; color:#0369a1 }
+    .src-time { margin-left:auto; font-variant-numeric:tabular-nums; opacity:.7 }
+    .src-retry { margin-left:8px; color:inherit; font-weight:700; text-decoration:underline }
+    /* Loading state on form submit (DISC-004) */
+    .search-bar button.loading { opacity:.7; pointer-events:none }
+    .search-bar button.loading::after { content:'...'; animation:ellipsis 1.2s steps(3,infinite); display:inline-block; width:0; overflow:hidden; vertical-align:bottom }
+    @keyframes ellipsis { 0%{width:0} 33%{width:.6em} 66%{width:1.2em} 100%{width:0} }
     .pub-footer { border-top:1px solid var(--grm-line); margin-top:40px; background:var(--grm-bg) } .pub-foot-inner { max-width:1080px; margin:0 auto; padding:32px 20px; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:20px; font-size:14px; color:var(--grm-muted) } .pub-foot-inner a { color:var(--grm-muted); margin:0 4px }
     @media (max-width:640px) { .search-bar { flex-wrap:wrap } .search-bar .opt { border-left:0; border-top:1px solid var(--grm-line); max-width:100%; width:100% } .result-card { flex-wrap:wrap } }
   </style>
@@ -64,7 +76,21 @@
     </div>
     {% endif %}
 
-    <!-- Results -->
+    <!-- Source status banner (DISC-004) -->
+    {% if results and search_source %}
+    {% set src_icon = {'apify': '📡', 'cache': '💾', 'fallback': '⚠️'}.get(search_source, '📊') %}
+    {% set src_label = {'apify': 'Hasil langsung dari Google Maps', 'cache': 'Hasil dari cache', 'fallback': 'Google Maps tidak merespons — menampilkan data fallback'}.get(search_source, '') %}
+    {% set src_class = {'apify': 'src-live', 'cache': 'src-cache', 'fallback': 'src-fallback'}.get(search_source, '') %}
+    <div class="source-banner {{ src_class }}">
+      <span>{{ src_icon }}</span>
+      <span>{{ src_label }}</span>
+      {% if search_time_ms %}<span class="src-time">{{ '%.0f'|format(search_time_ms / 1000) }}s</span>{% endif %}
+      {% if search_source == 'fallback' %}
+      <a href="?q={{ query|urlencode }}{% if city %}&city={{ city|urlencode }}{% endif %}" class="src-retry">Coba lagi →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% if results %}
     <div class="info">Ditemukan {{ result_count }} hasil untuk <strong>{{ query }}</strong></div>
     {% for r in results %}
@@ -112,5 +138,18 @@
   </div>
 
   {% include "landing/_footer.html" %}
+  <!-- DISC-004: Loading indicator on form submit -->
+  <script>
+  (function(){
+    var form = document.querySelector('.search-bar');
+    if (!form) return;
+    form.addEventListener('submit', function(){
+      var btn = form.querySelector('button[type=submit]');
+      if (btn) { btn.textContent = 'Mencari...'; btn.classList.add('loading'); btn.disabled = true; }
+      var inp = form.querySelector('input[name=q]');
+      if (inp) inp.readOnly = true;
+    });
+  })();
+  </script>
 </body>
 </html>

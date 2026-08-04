@@ -74,7 +74,16 @@
 
     <!-- Error state -->
     {% if error %}
-    <div class="error-card">{{ error }} <a href="/search{% if query %}?q={{ query|urlencode }}{% endif %}">Cari ulang →</a></div>
+    <div class="error-card">
+      <strong>⚠️ {{ error }}</strong>
+      <div style="margin-top:8px;font-size:13px">Google Maps mungkin sedang sibuk. Data ini berasal dari cache lokal — mungkin tidak sepenuhnya akurat.</div>
+      <div style="margin-top:12px">
+        <a href="/search{% if query %}?q={{ query|urlencode }}{% endif %}" class="pub-secondary" style="display:inline-block">← Cari ulang</a>
+        {% if preview and preview.place_id %}
+        <a href="/preview?place_id={{ preview.place_id }}&q={{ query|urlencode }}" class="pub-btn" style="display:inline-block;margin-left:8px">Coba lagi →</a>
+        {% endif %}
+      </div>
+    </div>
     {% endif %}
 
     <!-- Empty state: no preview and no error -->

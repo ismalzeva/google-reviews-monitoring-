@@ -44,7 +44,7 @@ def search():
     if request.method == "POST":
         ip = request.remote_addr or "127.0.0.1"
         if not _check_rate(ip):
-            error = "Terlalu banyak pencarian. Silakan tunggu sebentar, lalu coba lagi."
+            error = "⏳ Terlalu banyak pencarian. Silakan tunggu 1 menit, lalu coba lagi."
             searched = True
         else:
             query = request.form.get("q", "").strip()
@@ -100,6 +100,8 @@ def search():
         error=error,
         searched=searched,
         result_count=len(results),
+        search_source=results[0].get("source", "") if results else "",
+        search_time_ms=results[0].get("response_time_ms", 0) if results else 0,
     )
 
 
