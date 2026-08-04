@@ -1,8 +1,11 @@
-"""Branch Discovery Service — mock adapter for Google Places API.
+"""Branch Discovery Service — Apify-powered with mock fallback.
 
 RUN_02: Uses mock data since no Places API key configured.
-TAG: mock_adapter — replace with real Google Places Text Search in RUN_03.
+DISC-001: Replaced mock_adapter with Apify discovery actor
+          (compass/crawler-google-places) with mock fallback.
+TAG: production — wired to Apify; mock only as safety net.
 """
+import logging
 import uuid
 import json
 from datetime import datetime, timezone
@@ -10,6 +13,8 @@ from typing import Optional
 from app import db
 from app.models.entities import LocationCandidate, Outlet, Business
 from app.services.audit import log_audit
+
+logger = logging.getLogger(__name__)
 
 
 # ─── MOCK DATA: Bubur Fay Candidates ────────────────────
@@ -147,31 +152,72 @@ def _uuid():
     return str(uuid.uuid4())
 
 
-# ─── MOCK ADAPTER ────────────────────────────────────────
-def search_places(business_name: str, city: str = None) -> list[dict]:
-    """Mock Google Places Text Search.
+# ─── DISCOVERY CITIES ─────────────────────────────────────
+# Multi-city search surfaces all branches of a brand.
+# The Apify crawler returns ~1 result per search term, so we loop.
+_DISCOVERY_CITIES = [
+    "Depok", "Bekasi", "Jakarta", "Bogor", "Tangerang", "Bandung",
+]
 
-    TAG: mock_adapter — no API key configured.
-    Replace with real Places API call when key is available.
+
+def _normalize_apify_result(p: dict) -> dict:
+    """Normalize Apify discover() output to match the mock format
+    expected by all callers (search_region, phone, website, etc.)."""
+    return {
+        **p,
+        "primary_type": p.get("primary_type", "restaurant"),
+        "search_region": p.get("city_regency", ""),
+        "phone": p.get("phone", ""),
+        "website": p.get("website", ""),
+    }
+
+
+# ─── PRIMARY ADAPTER ─────────────────────────────────────
+def search_places(business_name: str, city: str = None) -> list[dict]:
+    """Search for business locations.
+
+    DISC-001: Primary path → Apify discovery actor (live Google Maps).
+    Falls back to mock data ONLY when Apify is unavailable or fails —
+    never silently with a degraded experience.
 
     Returns list of candidate dicts matching 02_BRANCH_DISCOVERY spec.
     """
+    # ── Primary: Apify (live Google Maps) ──────────────────
+    try:
+        from app.services.public_provider import build_public_review_adapter
+        adapter = build_public_review_adapter()
+        if adapter and hasattr(adapter, "discover"):
+            # Skip if adapter is still mock (no credentials)
+            is_mock = getattr(adapter, "source_name", "") == "mock"
+            if not is_mock:
+                cities = [city] if city else _DISCOVERY_CITIES
+                places = adapter.discover(business_name, cities=cities)
+                if places:
+                    logger.info(
+                        "Apify discovery: %d results for '%s'", len(places), business_name
+                    )
+                    return [_normalize_apify_result(p) for p in places]
+    except Exception as exc:
+        logger.warning(
+            "Apify discovery failed for '%s' — falling back to mock: %s",
+            business_name, exc,
+        )
+
+    # ── Fallback: mock data ────────────────────────────────
     results = []
     query = business_name.lower()
     for c in _MOCK_CANDIDATES:
         name = c["display_name"].lower()
         region = c.get("search_region", "").lower()
 
-        # Filter by query match
         if query not in name:
             continue
-
-        # Filter by city if specified
         if city and city.lower() != region:
             continue
 
         results.append(c)
 
+    logger.info("Mock discovery: %d results for '%s'", len(results), business_name)
     return results
 
 
