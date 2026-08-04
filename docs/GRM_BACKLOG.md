@@ -196,7 +196,7 @@ Mengubah visitor yang sudah lihat preview → daftar → trial aktif dalam <3 me
 - **Dependency:** GRM-004 (CTA dari preview)
 - **Priority:** P0
 - **Estimasi:** M
-- **Status:** Design ✅ (lihat `docs/GRM-006_REGISTRATION_2STEP_DESIGN.md`)
+- **Status:** Done ✅
 
 #### GRM-007: Trial Management
 
