@@ -5,7 +5,7 @@ Flow: Welcome → Step 1 (Add Outlet) → Step 2 (Verify) → Step 3 (Sync) → 
 import logging
 from datetime import datetime, timezone
 
-from flask import Blueprint, render_template, redirect, url_for, request, jsonify, session
+from flask import Blueprint, current_app, render_template, redirect, url_for, request, jsonify, session
 from flask_login import login_required, current_user
 
 from app import db
@@ -309,29 +309,37 @@ def step3_start_sync():
     _log_event('first_sync_started', biz, {'outlet': outlet.name})
 
     import threading
+
+    # Capture the real Flask app object for background thread context
+    _app = current_app._get_current_object()
+
     def _run_sync():
-        try:
-            from app.services.sync_service import sync_reviews
-            with db.session() as s:
-                result = sync_reviews(
-                    tenant_id=biz.tenant_id, business_id=biz.id,
-                    source='public_scraping',
-                    outlet_ids=[outlet.id],
-                )
-                synced = result.get('reviews_created', 0) + result.get('reviews_updated', 0)
+        with _app.app_context():
+            try:
+                from app.services.sync_service import sync_reviews
+                with db.session() as s:
+                    result = sync_reviews(
+                        tenant_id=biz.tenant_id, business_id=biz.id,
+                        source='public_scraping',
+                        outlet_ids=[outlet.id],
+                    )
+                    synced = result.get('reviews_created', 0) + result.get('reviews_updated', 0)
+                    _SYNC_PROGRESS[task_id] = {
+                        'status': 'done', 'total': result.get('reviews_received', 0),
+                        'synced': synced, 'percent': 100, 'error': None,
+                    }
+                    _log_event('first_sync_completed', biz, {
+                        'outlet': outlet.name,
+                        'reviews_synced': synced,
+                    })
+            except Exception as e:
+                logger.error("Trial step3 sync failed for biz=%s outlet=%s: %s",
+                             biz.id, outlet.name, e, exc_info=True)
                 _SYNC_PROGRESS[task_id] = {
-                    'status': 'done', 'total': result.get('reviews_received', 0),
-                    'synced': synced, 'percent': 100, 'error': None,
+                    'status': 'error', 'total': 0, 'synced': 0,
+                    'percent': 0,
+                    'error': 'Sinkronisasi gagal. Periksa koneksi internet Anda dan coba lagi.',
                 }
-                _log_event('first_sync_completed', biz, {
-                    'outlet': outlet.name,
-                    'reviews_synced': synced,
-                })
-        except Exception as e:
-            _SYNC_PROGRESS[task_id] = {
-                'status': 'error', 'total': 0, 'synced': 0,
-                'percent': 0, 'error': str(e),
-            }
 
     threading.Thread(target=_run_sync, daemon=True).start()
     return jsonify({'task_id': task_id})
