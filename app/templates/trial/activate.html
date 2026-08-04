@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+{% block title %}Aktivasi Trial — GRM{% endblock %}
+{% block head %}
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root {
+    --grm-dark: #0B0B0B; --grm-surface: #15171C; --grm-orange: #FF7A00;
+    --grm-text: #E5E5E5; --grm-muted: #888; --grm-green: #22C55E; --grm-red: #EF4444;
+    --grm-yellow: #E8A93A;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--grm-dark); color: var(--grm-text); margin: 0; font-family: Inter, sans-serif; }
+  .container { max-width: 460px; margin: 0 auto; padding: 16px; }
+
+  /* Step indicator */
+  .step-indicator { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .step-dots { display: flex; gap: 8px; }
+  .step-dot {
+    width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;
+  }
+  .step-dot.done { background: var(--grm-green); color: #000; }
+  .step-dot.active { background: var(--grm-orange); color: #000; }
+  .step-dot.pending { background: rgba(255,255,255,0.08); color: var(--grm-muted); }
+  .step-label { font-size: 14px; color: var(--grm-muted); margin-left: 4px; }
+
+  /* Card */
+  .card {
+    background: var(--grm-surface); border-radius: 12px; padding: 20px;
+    border: 1px solid rgba(255,255,255,0.05); margin-bottom: 16px;
+  }
+  .card-title { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
+
+  /* Form elements */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--grm-muted); margin-bottom: 4px; }
+  .field input {
+    width: 100%; padding: 12px; background: var(--grm-dark); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; color: var(--grm-text); font-size: 15px;
+  }
+  .field input:focus { outline: none; border-color: var(--grm-orange); }
+
+  .btn {
+    display: inline-block; padding: 12px 24px; border-radius: 8px; font-size: 15px;
+    font-weight: 600; cursor: pointer; border: none; text-decoration: none; text-align: center;
+  }
+  .btn-primary { background: var(--grm-orange); color: #fff; }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: rgba(255,255,255,0.06); color: var(--grm-text); }
+  .btn-block { display: block; width: 100%; }
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+  .btn-row .btn { flex: 1; }
+
+  /* Search results */
+  .search-result {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; background: var(--grm-dark); border-radius: 8px; margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .search-result .info { flex: 1; min-width: 0; }
+  .search-result .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search-result .meta { font-size: 12px; color: var(--grm-muted); }
+  .search-result .pick-btn { flex-shrink: 0; }
+
+  /* Progress bar */
+  .progress-bar { height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; margin: 12px 0; }
+  .progress-fill { height: 100%; background: var(--grm-orange); border-radius: 4px; transition: width 0.3s; }
+
+  /* Celebration */
+  .celebration { text-align: center; padding: 32px 0; }
+  .celebration .emoji { font-size: 48px; }
+  .celebration .title { font-size: 22px; font-weight: 700; margin: 12px 0 4px; }
+  .celebration .sub { color: var(--grm-muted); font-size: 14px; }
+
+  /* AI Advisor cards */
+  .advisor-card {
+    background: var(--grm-dark); border-radius: 10px; padding: 14px; margin-bottom: 10px;
+    border-left: 3px solid var(--grm-orange);
+  }
+  .advisor-card.mendesak { border-left-color: var(--grm-red); }
+  .advisor-card.sedang { border-left-color: var(--grm-yellow); }
+  .advisor-card .priority { font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+  .advisor-card .priority.mendesak { color: var(--grm-red); }
+  .advisor-card .priority.sedang { color: var(--grm-yellow); }
+  .advisor-card .issue { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .advisor-card .evidence { font-size: 12px; color: var(--grm-muted); font-style: italic; margin-bottom: 6px; }
+  .advisor-card .pic { font-size: 11px; color: var(--grm-muted); }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 24px; }
+  .empty-state .icon { font-size: 40px; margin-bottom: 8px; }
+  .empty-state .msg { font-size: 14px; color: var(--grm-muted); line-height: 1.5; }
+
+  /* Loading */
+  .spinner {
+    display: inline-block; width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--grm-orange); border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 8px; padding: 12px; color: var(--grm-red); font-size: 13px; margin: 12px 0;
+  }
+  .limit-note { font-size: 12px; color: var(--grm-muted); margin-top: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <!-- Step indicator -->
+  <div class="step-indicator">
+    <div class="step-dots">
+      {% for i in range(1, total_steps + 1) %}
+        {% if i < step %}
+        <div class="step-dot done">✓</div>
+        {% elif i == step %}
+        <div class="step-dot active">{{ i }}</div>
+        {% else %}
+        <div class="step-dot pending">{{ i }}</div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <span class="step-label">Langkah {{ step }}/{{ total_steps }} — {{ step_label }}</span>
+  </div>
+
+  <!-- STEP 1: Search Outlet -->
+  {% if step == 1 %}
+  <div class="card">
+    <h2 class="card-title">Cari Bisnis Anda</h2>
+    <div class="field">
+      <label>Cari nama bisnis atau alamat</label>
+      <input type="text" id="search-query" placeholder="Contoh: Bubur Fay..." autocomplete="off">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="doSearch()">Cari</button>
+    <div class="limit-note">Trial: maks 1 outlet</div>
+    <div id="search-results" style="margin-top:12px;"></div>
+    <div id="search-loading" style="display:none; text-align:center; padding:20px;">
+      <div class="spinner"></div>
+    </div>
+    <div id="search-error" class="error-box" style="display:none;"></div>
+    <div id="search-empty" style="display:none; text-align:center; padding:12px; color:var(--grm-muted); font-size:14px;">
+      Tidak ditemukan. Coba nama lain.
+    </div>
+  </div>
+  <div class="btn-row">
+    <a href="{{ url_for('trial.welcome') }}" class="btn btn-secondary">← Kembali</a>
+    <a href="{{ url_for('trial.skip') }}" class="btn btn-secondary">Lewati</a>
+  </div>
+  {% endif %}
+
+  <!-- STEP 2: Verify Outlet -->
+  {% if step == 2 and outlet %}
+  <div class="card">
+    <h2 class="card-title">Verifikasi Outlet</h2>
+    <div style="margin-bottom:12px;">
+      <strong>{{ outlet.name }}</strong><br>
+      <span style="font-size:13px; color:var(--grm-muted);">{{ outlet.address or 'Alamat tidak tersedia' }}</span>
+    </div>
+    {% if outlet.rating %}
+    <div style="font-size:13px; margin-bottom:12px;">★{{ outlet.rating }} · {{ outlet.review_count or 0 }} review</div>
+    {% endif %}
+    <p style="font-size:14px; color:var(--grm-muted);">Apakah ini outlet Anda?</p>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="confirmOutlet()">Ya, Lanjutkan</button>
+      <a href="{{ url_for('trial.step1_search') }}" class="btn btn-secondary">Batal</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- STEP 3: Sync Progress -->
+  {% if step == 3 %}
+  <div class="card">
+    <h2 class="card-title">Menyinkronkan Review</h2>
+    <div id="sync-status" style="text-align:center; padding:12px 0;">
+      <div class="spinner"></div>
+      <p style="margin-top:12px;">Mohon tunggu, proses 1–2 menit...</p>
+    </div>
+    <div id="sync-progress-bar" class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+    <div id="sync-stats" style="font-size:13px; color:var(--grm-muted); text-align:center;"></div>
+    <div id="sync-error" class="error-box" style="display:none;"></div>
+    <div id="sync-done" style="display:none; text-align:center;">
+      <p style="margin:12px 0;">✅ Sinkronisasi selesai!</p>
+      <a href="{{ url_for('trial.step4_wow') }}" class="btn btn-primary btn-block">Lihat Hasil →</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- STEP 4: WOW Moment -->
+  {% if step == 4 %}
+  <!-- Celebration -->
+  <div class="card">
+    <div class="celebration">
+      <div class="emoji">🎉</div>
+      <div class="title">Selesai!</div>
+      <div class="sub">Review pertama berhasil disinkronkan!</div>
+      {% if review_count %}
+      <div style="margin-top:8px; font-size:24px; font-weight:700;">{{ review_count }} review</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- AI Advisor or Empty -->
+  {% if empty_ai %}
+  <div class="card">
+    <div class="empty-state">
+      <div class="icon">📋</div>
+      <div class="msg">
+        Review masih terlalu sedikit untuk analisis mendalam.
+        Dashboard Anda tetap siap — kunjungi kembali setelah lebih banyak review masuk.
+      </div>
+      <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary" style="margin-top:12px;">Lihat Dashboard →</a>
+    </div>
+  </div>
+  {% elif advisor %}
+  <div class="card">
+    <h2 class="card-title">Prioritas Hari Ini ✨</h2>
+    {% if outlet %}
+    <div style="font-size:14px; margin-bottom:12px; color:var(--grm-muted);">{{ outlet.name }}</div>
+    {% endif %}
+    {% for issue in (advisor.issues or [])[:3] %}
+    <div class="advisor-card {{ issue.priority.lower() if issue.priority else '' }}">
+      <div class="priority {{ issue.priority.lower() if issue.priority else '' }}">
+        {% if issue.priority == 'Mendesak' %}🔴{% elif issue.priority == 'Sedang' %}🟡{% else %}🟢{% endif %}
+        {{ issue.priority or 'Ringan' }}
+      </div>
+      <div class="issue">{{ issue.masalah or issue.title or '' }}</div>
+      {% if issue.bukti or issue.evidence %}
+      <div class="evidence">"{{ issue.bukti or issue.evidence }}"</div>
+      {% endif %}
+      <div class="pic">
+        {% if issue.pic %}PIC: {{ issue.pic }}{% endif %}
+        {% if issue.saran %} · {{ issue.saran[0] if issue.saran is iterable and issue.saran is not string else issue.saran }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% if not advisor.issues %}
+    <p style="color:var(--grm-muted);">Belum ada prioritas yang terdeteksi.</p>
+    {% endif %}
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary btn-block" style="margin-top:12px;">Lihat Dashboard →</a>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+{% if step == 1 %}
+<script>
+async function doSearch() {
+  const query = document.getElementById('search-query').value.trim();
+  if (!query) return;
+  document.getElementById('search-results').innerHTML = '';
+  document.getElementById('search-empty').style.display = 'none';
+  document.getElementById('search-error').style.display = 'none';
+  document.getElementById('search-loading').style.display = 'block';
+
+  try {
+    const fd = new FormData(); fd.append('query', query);
+    const resp = await fetch('{{ url_for("trial.step1_do_search") }}', { method: 'POST', body: fd });
+    const data = await resp.json();
+    document.getElementById('search-loading').style.display = 'none';
+
+    if (!data.results || data.results.length === 0) {
+      document.getElementById('search-empty').style.display = 'block';
+      return;
+    }
+
+    let html = '';
+    data.results.forEach(r => {
+      html += `<div class="search-result">
+        <div class="info">
+          <div class="name">${escapeHtml(r.display_name)}</div>
+          <div class="meta">${r.address||''} ${r.rating ? '★'+r.rating+' · '+r.review_count+' review' : ''}</div>
+        </div>
+        <button class="btn btn-primary pick-btn" onclick="selectOutlet('${escapeHtml(r.place_id||'')}', '${escapeHtml(r.display_name||'')}', '${escapeHtml(r.address||'')}', ${r.rating||0}, ${r.review_count||0})">Pilih</button>
+      </div>`;
+    });
+    document.getElementById('search-results').innerHTML = html;
+  } catch (e) {
+    document.getElementById('search-loading').style.display = 'none';
+    document.getElementById('search-error').style.display = 'block';
+    document.getElementById('search-error').textContent = 'Gagal mencari. Coba lagi.';
+  }
+}
+
+async function selectOutlet(placeId, name, address, rating, reviewCount) {
+  const fd = new FormData();
+  fd.append('place_id', placeId); fd.append('name', name);
+  fd.append('address', address); fd.append('rating', rating);
+  fd.append('review_count', reviewCount);
+  const resp = await fetch('{{ url_for("trial.step1_select") }}', { method: 'POST', body: fd });
+  const data = await resp.json();
+  if (data.redirect) window.location.href = data.redirect;
+  else alert(data.error || 'Gagal memilih outlet');
+}
+
+function escapeHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+</script>
+{% endif %}
+
+{% if step == 2 %}
+<script>
+async function confirmOutlet() {
+  const resp = await fetch('{{ url_for("trial.step2_confirm") }}', { method: 'POST' });
+  const data = await resp.json();
+  if (data.redirect) window.location.href = data.redirect;
+  else alert(data.error || 'Gagal konfirmasi');
+}
+</script>
+{% endif %}
+
+{% if step == 3 %}
+<script>
+async function startSync() {
+  try {
+    const resp = await fetch('{{ url_for("trial.step3_start_sync") }}', { method: 'POST' });
+    const data = await resp.json();
+    if (data.task_id) pollProgress(data.task_id);
+    else showSyncError(data.error || 'Gagal memulai sync');
+  } catch (e) { showSyncError('Gagal memulai sync'); }
+}
+
+async function pollProgress(taskId) {
+  try {
+    const resp = await fetch('{{ url_for("trial.step3_progress", task_id="TASKID") }}'.replace('TASKID', taskId));
+    const data = await resp.json();
+    const fill = document.querySelector('.progress-fill');
+    const stats = document.getElementById('sync-stats');
+    if (fill) fill.style.width = (data.percent||0) + '%';
+    if (stats) stats.textContent = (data.synced||0) + '/' + (data.total||0) + ' review tersimpan';
+
+    if (data.status === 'done') {
+      document.getElementById('sync-status').style.display = 'none';
+      document.getElementById('sync-done').style.display = 'block';
+      document.getElementById('sync-progress-bar').style.display = 'none';
+    } else if (data.status === 'error') {
+      showSyncError(data.error || 'Sync gagal');
+    } else {
+      setTimeout(() => pollProgress(taskId), 2000);
+    }
+  } catch (e) { showSyncError('Gagal memeriksa progress'); }
+}
+
+function showSyncError(msg) {
+  document.getElementById('sync-status').style.display = 'none';
+  const err = document.getElementById('sync-error');
+  err.style.display = 'block';
+  err.textContent = msg + ' ';
+  const retryBtn = document.createElement('button');
+  retryBtn.className = 'btn btn-primary';
+  retryBtn.textContent = 'Coba Lagi';
+  retryBtn.onclick = () => { err.style.display = 'none'; document.getElementById('sync-status').style.display = 'block'; startSync(); };
+  err.appendChild(retryBtn);
+}
+
+// Auto-start sync
+startSync();
+</script>
+{% endif %}
+{% endblock %}

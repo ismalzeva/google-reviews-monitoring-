@@ -51,7 +51,8 @@ class TestPublicPages(GateQBase):
         r = self.app.test_client().get("/")
         self.assertEqual(r.status_code, 200)
         html = r.data.decode()
-        for token in ("Pantau review bisnis Anda", "Bagaimana cara kerjanya", "Login", "Temukan outlet"):
+        for token in ("Tahu masalah terbesar pelanggan", "AI Customer Experience Manager",
+                      "Cara kerjanya", "Lihat Analisis"):
             self.assertIn(token, html)
 
     def test_landing_redirect_when_authenticated(self):

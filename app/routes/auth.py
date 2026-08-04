@@ -214,9 +214,9 @@ def _handle_step2():
     session.pop('registration_step1', None)
     session.pop('registration_csrf', None)
 
-    # AC-13: auto-login → redirect to dashboard
+    # AC-13: auto-login → redirect to trial welcome (GRM-007)
     login_user(user)
-    return redirect(url_for('dashboard.index'))
+    return redirect(url_for('trial.welcome'))
 
 
 # ─── LOGIN / LOGOUT ───────────────────────────────────────

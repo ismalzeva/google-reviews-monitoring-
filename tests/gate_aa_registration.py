@@ -51,7 +51,7 @@ def _post_step2(client, brand_name='GateBrand', business_name='', city='Jakarta'
 # ═══════════════════════════════════════════════════════════
 
 def test_full_registration_flow(app_context):
-    """End-to-end: step1 → step2 → auto-login → dashboard."""
+    """End-to-end: step1 → step2 → auto-login → trial welcome (GRM-007)."""
     with app_context.app_context():
         c = _client(app_context)
         r1 = _post_step1(c)
@@ -60,7 +60,7 @@ def test_full_registration_flow(app_context):
 
         r2 = _post_step2(c)
         assert r2.status_code == 302
-        assert '/dashboard' in r2.headers['Location']
+        assert '/trial/' in r2.headers['Location']  # GRM-007: redirect to trial
 
         # Verify DB
         user = User.query.filter_by(email=TEST_EMAIL).first()
@@ -71,7 +71,9 @@ def test_full_registration_flow(app_context):
         assert user.business.status == 'trialing'
         assert user.business.trial_ends_at is not None
 
-        # Verify auto-login: can access dashboard
+        # Verify auto-login: can access dashboard (trial redirect → dashboard accessible)
+        user.business.setup_complete = True
+        db.session.commit()
         r3 = c.get('/dashboard/')
         assert r3.status_code == 200
 
@@ -168,12 +170,15 @@ def test_business_name_optional(app_context):
 
 
 def test_no_email_verification_needed(app_context):
+    """GRM-007: No email verification — dashboard redirects if trial not set up."""
     with app_context.app_context():
         c = _client(app_context)
         _post_step1(c)
         _post_step2(c)
+        # Fresh business → redirect to trial (not 200 dashboard)
         r = c.get('/dashboard/')
-        assert r.status_code == 200
+        assert r.status_code == 302
+        assert '/trial/' in r.headers['Location']
 
 
 # ═══════════════════════════════════════════════════════════

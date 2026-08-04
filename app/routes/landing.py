@@ -1,7 +1,7 @@
 """Public landing / guide / help / about pages (RUN_M3)."""
 from datetime import datetime, timezone
 
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, request
 from flask_login import current_user
 
 bp = Blueprint("landing", __name__)
@@ -18,6 +18,32 @@ def index():
         return redirect(url_for("dashboard.index"))
     return render_template("landing/landing.html", version=APP_VERSION,
                            release=APP_RELEASE)
+
+
+@bp.route("/features")
+def features():
+    return render_template("landing/features.html")
+
+
+@bp.route("/how-it-works")
+def how_it_works():
+    return render_template("landing/how_it_works.html")
+
+
+@bp.route("/demo")
+def demo():
+    query = request.args.get("q", "")
+    return render_template("landing/demo.html", query=query)
+
+
+@bp.route("/pricing")
+def pricing():
+    return render_template("landing/pricing.html")
+
+
+@bp.route("/faq")
+def faq():
+    return render_template("landing/faq.html")
 
 
 @bp.route("/guide")

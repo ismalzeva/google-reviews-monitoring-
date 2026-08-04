@@ -324,6 +324,36 @@ Jika user keluar di tengah activation flow (tutup browser, timeout, dll), saat l
 | AC-25 | Event `outlet_added`, `first_sync_started`, `first_sync_completed`, `wow_moment_reached`, `trial_expired` difire sesuai milestone | Masing-masing event dicatat dengan timestamp + tenant_id |
 | AC-26 | Tracking bersifat non-blocking (fire-and-forget) | Tidak mengganggu user flow jika logger gagal |
 
+### 4.5b Performance (AC-29)
+
+| AC | Deskripsi | Verifikasi |
+|----|-----------|------------|
+| AC-29 | Time to WOW ≤3 menit dari klik "Mulai Aktivasi" | Timer diukur: discovery ≤30s, verifikasi ≤10s, sync ≤2m, AI Advisor ≤20s |
+
+### 4.5c Onboarding Gating (AC-30)
+
+| AC | Deskripsi | Verifikasi |
+|----|-----------|------------|
+| AC-30 | Dashboard locked sebelum outlet + sync selesai | User trial yang `setup_complete=False` tidak bisa akses `/dashboard/`, `/dashboard/*` — selalu redirect ke `/trial/welcome` atau step saat ini |
+
+### 4.5d First Success Celebration (AC-31)
+
+| AC | Deskripsi | Verifikasi |
+|----|-----------|------------|
+| AC-31 | First Success Celebration setelah sync pertama | Di WOW Moment, sebelum menampilkan AI Advisor, tampilkan animasi/confetti singkat + pesan "🎉 Review pertama berhasil disinkronkan!" + jumlah review yang masuk |
+
+### 4.5e Progress Memory (AC-32)
+
+| AC | Deskripsi | Verifikasi |
+|----|-----------|------------|
+| AC-32 | Progress memory lintas sesi | `business.setup_progress` disimpan di DB (JSON), bukan di session Flask. User bisa tutup browser, login lagi, resume dari step terakhir yang belum selesai |
+
+### 4.5f Empty AI Handling (AC-33)
+
+| AC | Deskripsi | Verifikasi |
+|----|-----------|------------|
+| AC-33 | Empty AI handling yang ramah | Jika AI Advisor tidak menghasilkan output (review terlalu sedikit, LLM timeout), tampilkan pesan ramah: "Review masih terlalu sedikit untuk analisis mendalam. Dashboard Anda tetap siap — kunjungi kembali setelah lebih banyak review masuk." + tombol "Lihat Dashboard" |
+
 ### 4.6 Non-Goals (AC-NG)
 
 | AC-NG | Tidak Dikerjakan |

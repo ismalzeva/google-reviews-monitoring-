@@ -66,11 +66,54 @@ class Business(db.Model):
     status = db.Column(db.String(50), default='active')  # active, trialing, suspended, deleted
     city = db.Column(db.String(100), nullable=True)
     trial_ends_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    setup_complete = db.Column(db.Boolean, default=False, nullable=False)
+    setup_progress = db.Column(db.JSON, nullable=True)
+    setup_started_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    wow_moment_reached_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
     outlets = db.relationship('Outlet', backref='business', lazy='dynamic')
     users = db.relationship('User', backref='business', lazy='dynamic')
+
+    @property
+    def trial_status(self):
+        """Computed trial status: active / expiring_soon / expired."""
+        if self.status != 'trialing':
+            return self.status
+        if self.trial_ends_at is None:
+            return 'active'
+        from datetime import datetime, timezone as tz
+        now = datetime.now(tz.utc)
+        trial_end = self.trial_ends_at
+        if trial_end.tzinfo is None:
+            trial_end = trial_end.replace(tzinfo=tz.utc)
+        days_left = (trial_end - now).days
+        if days_left < 0:
+            return 'expired'
+        if days_left <= 3:
+            return 'expiring_soon'
+        return 'active'
+
+    @property
+    def trial_days_left(self):
+        """Days remaining in trial period."""
+        if self.trial_ends_at is None:
+            return 0
+        from datetime import datetime, timezone as tz
+        now = datetime.now(tz.utc)
+        trial_end = self.trial_ends_at
+        # Handle both timezone-aware and naive datetimes
+        if trial_end.tzinfo is None:
+            trial_end = trial_end.replace(tzinfo=tz.utc)
+        return max(0, (trial_end - now).days)
+
+    @property
+    def outlet_count(self):
+        """Number of monitored outlets."""
+        return Outlet.query.filter_by(
+            tenant_id=self.tenant_id, business_id=self.id, monitor_enabled=True
+        ).count()
 
 
 # ─── OUTLET ──────────────────────────────────────────────

@@ -80,6 +80,9 @@ def create_app(config_name=None):
     from app.routes.public_api import bp as public_api_bp
     app.register_blueprint(public_api_bp)
 
+    from app.routes.trial import bp as trial_bp
+    app.register_blueprint(trial_bp)
+
     # Error handlers
     @app.errorhandler(400)
     def bad_request(e):

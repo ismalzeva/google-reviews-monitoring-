@@ -1,5 +1,5 @@
 """Dashboard routes — RUN_05 intelligence dashboard with analysis features."""
-from flask import Blueprint, render_template, jsonify, g, request
+from flask import Blueprint, render_template, jsonify, g, request, redirect, url_for
 from flask_login import login_required, current_user
 
 from app.models.entities import Business, Outlet, Review, Issue, AuditLog, ReviewAnalysis
@@ -13,6 +13,21 @@ from app.services.analysis_service import (
 from app.services.audit import log_audit
 
 bp = Blueprint('dashboard', __name__)
+
+
+@bp.before_request
+@login_required
+def _redirect_trialing():
+    """AC-30: lock dashboard for trialing users who haven't activated."""
+    if current_user.is_authenticated:
+        biz = current_user.business
+        if biz and biz.status == 'trialing' and not biz.setup_complete:
+            # Don't redirect if already on trial page (avoid loop)
+            if not request.path.startswith('/trial/') and not request.path.startswith('/static'):
+                from app.routes.trial import redirect_trialing_user
+                target = redirect_trialing_user()
+                if target:
+                    return redirect(target)
 
 
 # ─── PAGES ──────────────────────────────────────────────
