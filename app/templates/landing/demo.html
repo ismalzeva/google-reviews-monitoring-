@@ -89,9 +89,12 @@
   </div>
   {% include "landing/_footer.html" %}
   <script>
+    document.getElementById('q').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') goSearch();
+    });
     function goSearch() {
       const q = document.getElementById('q').value.trim();
-      if (q) { window.location = '/demo?q=' + encodeURIComponent(q); }
+      if (q) { window.location = '/search?q=' + encodeURIComponent(q); }
     }
   </script>
 </body>

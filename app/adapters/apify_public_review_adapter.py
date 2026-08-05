@@ -136,6 +136,7 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
         max_reviews: Optional[int] = None,
         max_places: Optional[int] = None,
         base_url: str = APIFY_API_BASE,
+        max_retries: int = 3,
     ):
         self.token = token or public_provider.get_apify_token()
         self.review_actor_id = review_actor_id or public_provider.get_apify_review_actor_id()
@@ -145,6 +146,9 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
         self.max_reviews = max_reviews if max_reviews is not None else public_provider.get_apify_max_reviews()
         self.max_places = max_places if max_places is not None else public_provider.get_apify_max_places()
         self.base_url = base_url
+        self.max_retries = max_retries
+        # HTTP timeout: cap at 5s per request to detect hangs fast
+        self._http_timeout = min(self.timeout_seconds, 5) if self.timeout_seconds else 5
         # Cache: (place_id, since) -> normalized items (one actor run per sync)
         self._run_cache = {}
 
@@ -159,23 +163,23 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
         """HTTP call with retry for 429/transient 5xx; never retry 401/403."""
         url = f"{self.base_url}{path}"
         last_exc = None
-        for attempt in range(3):  # bounded retries (configurable via env default 3)
+        for attempt in range(self.max_retries):
             try:
                 resp = requests.request(
                     method, url, params=params, headers=self._headers(),
-                    json=json_body, timeout=self.timeout_seconds,
+                    json=json_body, timeout=self._http_timeout,
                 )
             except requests.exceptions.Timeout as exc:
                 last_exc = ApifyError("apify timeout", retryable=True, code="TIMEOUT")
                 logger.warning("Apify timeout (attempt %s): %s", attempt + 1, exc)
-                if attempt < 2:
+                if attempt < self.max_retries - 1:
                     time.sleep(2 ** attempt)
                     continue
                 raise last_exc
             except requests.exceptions.RequestException as exc:
                 last_exc = ApifyError(f"apify request failed: {exc}", retryable=True)
                 logger.warning("Apify request error (attempt %s): %s", attempt + 1, exc)
-                if attempt < 2:
+                if attempt < self.max_retries - 1:
                     time.sleep(2 ** attempt)
                     continue
                 raise last_exc
@@ -190,7 +194,7 @@ class ApifyPublicReviewAdapter(PublicReviewSourceAdapter):
                     "apify resource not found", status_code=404, retryable=False, code="NOT_FOUND"
                 )
             if resp.status_code in RETRYABLE_STATUS:
-                if attempt < 2:
+                if attempt < self.max_retries - 1:
                     logger.warning("Apify HTTP %s (attempt %s), backing off", resp.status_code, attempt + 1)
                     time.sleep(2 ** attempt)
                     continue

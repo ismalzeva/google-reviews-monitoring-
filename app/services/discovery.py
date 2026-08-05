@@ -147,6 +147,21 @@ _MOCK_CANDIDATES = [
         "search_region": "Bogor",
     },
     {
+        "place_id": "ChIJUWmProXY8Z4RcggGriWJTKY",
+        "display_name": "Kopi Ketjil Pondok Indah",
+        "formatted_address": "Pondok Indah, Jakarta Selatan, DKI Jakarta",
+        "latitude": -6.2768,
+        "longitude": 106.7766,
+        "business_status": "OPERATIONAL",
+        "google_maps_uri": "https://maps.app.goo.gl/zhQfK7rzYpfjRcQQ9",
+        "rating": 4.5,
+        "review_count": 245,
+        "phone": "",
+        "website": "https://instagram.com/kopiketjil",
+        "primary_type": "cafe",
+        "search_region": "Jakarta",
+    },
+    {
         "place_id": "ChIJ0_official-depok-001",
         "display_name": "Bubur Fay Official Store Depok",
         "formatted_address": "Jl. Margonda Raya No. 88, Depok, Jawa Barat",
@@ -279,7 +294,8 @@ def normalize_place_id(place_id: str) -> str:
 
 
 # ─── PRIMARY ADAPTER ─────────────────────────────────────
-def search_places(business_name: str, city: str = None) -> list[dict]:
+def search_places(business_name: str, city: str = None, timeout: float | None = None,
+                  live_search: bool = True) -> list[dict]:
     """Search for business locations.
 
     DISC-001: Primary path → Apify discovery actor (live Google Maps).
@@ -291,6 +307,10 @@ def search_places(business_name: str, city: str = None) -> list[dict]:
       2. Try Apify (8s timeout per actor run)   (KPI: <10s ✅)
       3. Cache Apify results to disk
       4. Fallback to mock on failure              (KPI: <2s ✅)
+
+    ``timeout`` overrides the adapter timeout for this call (seconds).
+    Use for public-facing calls where < 10s response is required.
+    None = use the adapter's configured timeout.
 
     Returns list of candidate dicts with source + response_time_ms.
     """
@@ -311,37 +331,45 @@ def search_places(business_name: str, city: str = None) -> list[dict]:
         return cached
 
     # ── Step 2: Live Apify discovery ─────────────────────
-    try:
-        from app.services.public_provider import build_public_review_adapter
-        adapter = build_public_review_adapter()
-        if adapter and hasattr(adapter, "discover"):
-            is_mock = getattr(adapter, "source_name", "") == "mock"
-            if not is_mock:
-                cities = [city] if city else _DISCOVERY_CITIES
-                logger.info(
-                    "Apify discovery: searching '%s' across %d cities (timeout %ds)...",
-                    business_name, len(cities),
-                    getattr(adapter, "timeout_seconds", "?"),
-                )
-                places = adapter.discover(business_name, cities=cities)
-                if places:
-                    source = "apify"
-                    results = [_normalize_apify_result(p) for p in places]
-                    _cache_set(business_name, results, city)
-                    elapsed = (time.perf_counter() - t0) * 1000
-                    for r in results:
-                        r["response_time_ms"] = round(elapsed)
-                        r["source"] = source
+    if live_search:
+        try:
+            from app.services.public_provider import build_public_review_adapter
+            adapter = build_public_review_adapter()
+            if adapter and hasattr(adapter, "discover"):
+                is_mock = getattr(adapter, "source_name", "") == "mock"
+                if not is_mock:
+                    # Override adapter timeout if caller requests fast response
+                    if timeout is not None:
+                        adapter.timeout_seconds = timeout
+                        adapter.max_retries = 1  # No retry for public search — fail fast
+                        # Fast path: single search without location filter (1 Apify call)
+                        cities_to_search = [None]
+                    else:
+                        cities_to_search = [city] if city else _DISCOVERY_CITIES
                     logger.info(
-                        "Apify OK: %d results for '%s' in %.0fms",
-                        len(results), business_name, elapsed,
+                        "Apify discovery: searching '%s' across %d cities (timeout %ds)...",
+                        business_name, len(cities_to_search),
+                        getattr(adapter, "timeout_seconds", "?"),
                     )
-                    return results
-    except Exception as exc:
-        logger.warning(
-            "Apify discovery failed for '%s' — falling back to mock: %s",
-            business_name, exc,
-        )
+                    places = adapter.discover(business_name, cities=cities_to_search)
+                    if places:
+                        source = "apify"
+                        results = [_normalize_apify_result(p) for p in places]
+                        _cache_set(business_name, results, city)
+                        elapsed = (time.perf_counter() - t0) * 1000
+                        for r in results:
+                            r["response_time_ms"] = round(elapsed)
+                            r["source"] = source
+                        logger.info(
+                            "Apify OK: %d results for '%s' in %.0fms",
+                            len(results), business_name, elapsed,
+                        )
+                        return results
+        except Exception as exc:
+            logger.warning(
+                "Apify discovery failed for '%s' — falling back to mock: %s",
+                business_name, exc,
+            )
 
     # ── Step 3: Fallback to mock data ────────────────────
     results = []

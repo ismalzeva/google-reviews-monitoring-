@@ -228,6 +228,30 @@ MOCK_BRANCHES: dict[str, MockPreview] = {
             {"place_id": "ChIJ0_bekasi-gm-003", "name": "Bekasi (Grand Mall)", "rating": 4.3},
         ],
     ),
+    # Kopi Ketjil Pondok Indah — real Google Maps listing
+    "ChIJUWmProXY8Z4RcggGriWJTKY": MockPreview(
+        place_id="ChIJUWmProXY8Z4RcggGriWJTKY",
+        display_name="Kopi Ketjil Pondok Indah",
+        formatted_address="Jl. Metro Pondok Indah, Jakarta Selatan, DKI Jakarta",
+        city="Jakarta Selatan",
+        rating=4.4,
+        review_count=245,
+        distribution={5: 120, 4: 72, 3: 28, 2: 15, 1: 10},
+        top_issues=[
+            {"title": "Antrian terlalu lama saat weekend", "count": 34, "category": "kecepatan"},
+            {"title": "Parkir terbatas di area ruko", "count": 28, "category": "fasilitas"},
+            {"title": "Harga menu terlalu premium untuk porsi", "count": 22, "category": "harga"},
+        ],
+        ai_teaser_visible=[
+            {"title": "Perlu tambahan barista saat peak weekend", "count": 34},
+            {"title": "Sistem antrian digital bisa kurangi wait time", "count": 28},
+        ],
+        ai_teaser_locked={"title": "Kopi single origin batch consistency", "count": 19},
+        branch_selector=[
+            {"place_id": "ChIJUWmProXY8Z4RcggGriWJTKY", "name": "Pondok Indah (Utama)", "rating": 4.4},
+            {"place_id": "ChIJUWmProXY8Z4RcggGriWJTKY", "name": "Kemang (Cabang)", "rating": 4.2},
+        ],
+    ),
 }
 
 
@@ -273,8 +297,7 @@ def _try_alternate_format(place_id: str) -> Optional[str]:
 def get_preview_data(place_id: str) -> Optional[MockPreview]:
     """Retrieve preview data for a place_id (cache-first).
 
-    DISC-002: Falls back to alternate underscore/hyphen format
-    when exact lookup fails.
+    Priority: real DB data → mock data → None.
     """
     place_id = normalize_place_id(place_id)
     if not place_id:
@@ -285,6 +308,26 @@ def get_preview_data(place_id: str) -> Optional[MockPreview]:
         logger.info("preview cache hit for %s", place_id)
         return MockPreview(**cached)
 
+    # 1. Try real database data first
+    real = _from_real_outlet(place_id)
+    if real:
+        _cache_set(place_id, {
+            "place_id": real.place_id,
+            "display_name": real.display_name,
+            "formatted_address": real.formatted_address,
+            "city": real.city,
+            "rating": real.rating,
+            "review_count": real.review_count,
+            "distribution": real.distribution,
+            "top_issues": real.top_issues,
+            "ai_teaser_visible": real.ai_teaser_visible,
+            "ai_teaser_locked": real.ai_teaser_locked,
+            "branch_selector": real.branch_selector,
+        })
+        logger.info("preview REAL hit for %s (%s, %d reviews)", place_id, real.display_name, real.review_count)
+        return real
+
+    # 2. Fall back to mock data
     mock = MOCK_BRANCHES.get(place_id)
     if not mock:
         alt_id = _try_alternate_format(place_id)
@@ -310,9 +353,273 @@ def get_preview_data(place_id: str) -> Optional[MockPreview]:
         return mock
 
     logger.warning("preview miss for %s", place_id)
+
+    # 3. Check dynamic previews (resolved from Google Maps short links)
+    dynamic = _DYNAMIC_PREVIEWS.get(place_id)
+    if dynamic:
+        preview = _build_dynamic_mock_preview(place_id, dynamic)
+        _cache_set(place_id, {
+            "place_id": preview.place_id,
+            "display_name": preview.display_name,
+            "formatted_address": preview.formatted_address,
+            "city": preview.city,
+            "rating": preview.rating,
+            "review_count": preview.review_count,
+            "distribution": preview.distribution,
+            "top_issues": preview.top_issues,
+            "ai_teaser_visible": preview.ai_teaser_visible,
+            "ai_teaser_locked": preview.ai_teaser_locked,
+            "branch_selector": preview.branch_selector,
+        })
+        logger.info("preview dynamic hit for %s (%s)", place_id, dynamic.get("display_name"))
+        return preview
+
     return None
 
 
+# ─── Dynamic Preview Registration ─────────────────────
+# Populated from Google Maps short link resolution.
+# Format: {place_id: {display_name, google_maps_uri, city, rating, review_count}}
+_DYNAMIC_PREVIEWS: dict[str, dict] = {}
+
+
+def register_dynamic_preview(place_id: str, display_name: str,
+                              google_maps_uri: str = "",
+                              city: str = "Indonesia",
+                              rating: float = 4.0,
+                              review_count: int = 100) -> None:
+    """Register a place for dynamic preview — used for short-link resolution."""
+    _DYNAMIC_PREVIEWS[place_id] = {
+        "display_name": display_name,
+        "google_maps_uri": google_maps_uri,
+        "city": city,
+        "rating": rating,
+        "review_count": review_count,
+    }
+    # Clear any existing cache for this place_id
+    key = f"preview:{place_id}"
+    if key in _cache:
+        del _cache[key]
+    logger.info("Dynamic preview registered: %s (%s)", place_id, display_name)
+
+
+def _build_dynamic_mock_preview(place_id: str, info: dict) -> MockPreview:
+    """Build a basic MockPreview for a dynamically resolved place."""
+    rating = info.get("rating", 4.0)
+    review_count = info.get("review_count", 100)
+    # Estimate distribution from rating
+    dist = _estimate_distribution(rating, review_count)
+    display_name = info.get("display_name", "Unknown Business")
+    city = info.get("city", "Indonesia")
+
+    return MockPreview(
+        place_id=place_id,
+        display_name=display_name,
+        formatted_address=info.get("google_maps_uri", ""),
+        city=city,
+        rating=rating,
+        review_count=review_count,
+        distribution=dist,
+        top_issues=[
+            {"title": "Data review sedang dikumpulkan", "count": review_count, "category": "info"},
+        ],
+        ai_teaser_visible=[
+            {"title": "Review asli dari Google Maps akan muncul di sini", "count": 0},
+        ],
+        ai_teaser_locked={"title": "Analisis AI menunggu data review", "count": 0},
+        branch_selector=[
+            {"place_id": place_id, "name": display_name, "rating": rating},
+        ],
+    )
+
+
+def _estimate_distribution(rating: float, total: int) -> dict:
+    """Estimate a realistic star distribution from an average rating."""
+    if rating >= 4.5:
+        p5, p4, p3, p2, p1 = 50, 30, 12, 5, 3
+    elif rating >= 4.0:
+        p5, p4, p3, p2, p1 = 35, 35, 18, 8, 4
+    elif rating >= 3.5:
+        p5, p4, p3, p2, p1 = 20, 30, 30, 12, 8
+    elif rating >= 3.0:
+        p5, p4, p3, p2, p1 = 10, 25, 30, 20, 15
+    else:
+        p5, p4, p3, p2, p1 = 5, 15, 25, 30, 25
+    return {
+        5: round(total * p5 / 100),
+        4: round(total * p4 / 100),
+        3: round(total * p3 / 100),
+        2: round(total * p2 / 100),
+        1: round(total * p1 / 100),
+    }
+
+
+def _group_issues(neg_reviews: list, total: int) -> list[dict]:
+    """Group negative/neutral reviews into thematic issues by keyword matching."""
+    if not neg_reviews:
+        return []
+
+    KEYWORD_MAP = {
+        "pelayanan": ["pelayan", "pegawai", "staff", "karyawan", "kasir", "pramusaji", "waiters",
+                      "ga ramah", "tidak ramah", "cuek", "judes", "kasar", "lambat", "lemot",
+                      "ngobrol", "main hp", "senyum", "sopan", "ramah"],
+        "rasa": ["rasa", "enak", "lezat", "hambar", "asin", "manis", "pedas", "gurih",
+                 "tidak enak", "ga enak", "basi", "berubah", "tidak konsisten", "konsisten"],
+        "harga": ["harga", "mahal", "murah", "naik", "overprice", "worth it", "sepadan",
+                  "kemahalan", "ngga worth"],
+        "porsi": ["porsi", "dikit", "sedikit", "banyak", "mengecil", "berkurang", "nambah"],
+        "tempat": ["tempat", "bersih", "kotor", "bau", "sempit", "parkir", "toilet",
+                   "wc", "mushola", "ac", "panas", "gerah", "nyaman", "ambience", "suasana"],
+        "kecepatan": ["lama", "nunggu", "antri", "waiting", "cepat", "lambat", "telat",
+                      "menunggu", "ngantri"],
+        "packaging": ["bungkus", "packaging", "kemasan", "tumpah", "bocor", "take away",
+                      "takeaway", "bungkusan", "plastik"],
+    }
+
+    CATEGORY_LABELS = {
+        "pelayanan": "Pelayanan",
+        "rasa": "Kualitas Rasa",
+        "harga": "Harga",
+        "porsi": "Porsi",
+        "tempat": "Tempat & Suasana",
+        "kecepatan": "Kecepatan",
+        "packaging": "Kemasan",
+        "lainnya": "Masukan Lainnya",
+    }
+
+    groups = {}
+    unmatched = []
+
+    for r in neg_reviews:
+        text = (r.comment or '').lower()
+        matched = False
+        for category, keywords in KEYWORD_MAP.items():
+            if any(kw in text for kw in keywords):
+                groups.setdefault(category, []).append(r)
+                matched = True
+                break
+        if not matched:
+            unmatched.append(r)
+    
+    if unmatched:
+        groups["lainnya"] = unmatched
+
+    # Build top issues
+    issues = []
+    for category, revs in sorted(groups.items(), key=lambda x: -len(x[1])):
+        # Get best representative text
+        sample_texts = [(r.comment or '').strip() for r in revs if (r.comment or '').strip()]
+        title = sample_texts[0][:80] if sample_texts else "Masukan tanpa teks"
+        
+        issues.append({
+            "title": title,
+            "count": len(revs),
+            "category": CATEGORY_LABELS.get(category, category),
+        })
+
+    return issues[:5] if issues else [
+        {"title": "Perlu analisis lebih lanjut", "count": len(neg_reviews), "category": "Umum"}
+    ]
+
+
+def _from_real_outlet(place_id: str) -> Optional[MockPreview]:
+    """Build MockPreview from real database outlet + reviews.
+
+    Only used when an outlet with matching public_place_id exists and has reviews.
+    """
+    try:
+        from app.models.entities import Outlet, Review, Business
+        from app import create_app
+        from collections import Counter
+
+        app = create_app()
+        with app.app_context():
+            outlet = Outlet.query.filter_by(public_place_id=place_id).first()
+            if not outlet:
+                return None
+
+            reviews = Review.query.filter_by(outlet_id=outlet.id).all()
+            if not reviews:
+                return None
+
+            # Rating distribution
+            dist_counter = Counter()
+            for r in reviews:
+                dist_counter[r.star_rating] += 1
+            distribution = {
+                5: dist_counter.get(5, 0),
+                4: dist_counter.get(4, 0),
+                3: dist_counter.get(3, 0),
+                2: dist_counter.get(2, 0),
+                1: dist_counter.get(1, 0),
+            }
+
+            total = len(reviews)
+
+            # Negative reviews for top issues — group by keyword
+            neg_reviews = [r for r in reviews if r.star_rating <= 3]
+            top_issues = _group_issues(neg_reviews, total)
+
+            avg_rating = round(sum(r.star_rating for r in reviews) / total, 1) if total > 0 else 0
+
+            # Build branch selector from all real outlets
+            all_outlets = Outlet.query.filter(Outlet.public_place_id.isnot(None)).all()
+            branch_selector = []
+            for o in all_outlets[:10]:
+                branch_selector.append({
+                    "place_id": o.public_place_id,
+                    "name": o.name,
+                    "rating": o.business_rating or 0,
+                })
+
+            return MockPreview(
+                place_id=place_id,
+                display_name=outlet.name,
+                formatted_address=outlet.address or '',
+                city=outlet.city_regency or '',
+                rating=avg_rating,
+                review_count=total,
+                distribution=distribution,
+                top_issues=top_issues,
+                ai_teaser_visible=top_issues[:2],
+                ai_teaser_locked=top_issues[2] if len(top_issues) > 2 else {"title": "Butuh lebih banyak data review", "count": 0},
+                branch_selector=branch_selector,
+            )
+    except Exception as e:
+        logger.warning("_from_real_outlet failed for %s: %s", place_id, e)
+        return None
+
+
 def get_all_branches() -> list[MockPreview]:
-    """Return semua cabang yang tersedia di mock data."""
-    return list(MOCK_BRANCHES.values())
+    """Return semua cabang: real DB outlets + mock data."""
+    branches = list(MOCK_BRANCHES.values())
+    
+    # Also include real outlets from database
+    try:
+        from app.models.entities import Outlet
+        from app import create_app
+        
+        app = create_app()
+        with app.app_context():
+            real_outlets = Outlet.query.filter(
+                Outlet.public_place_id.isnot(None),
+                Outlet.public_place_id.notin_([b.place_id for b in branches])
+            ).all()
+            for o in real_outlets:
+                branches.append(MockPreview(
+                    place_id=o.public_place_id,
+                    display_name=o.name,
+                    formatted_address=o.address or '',
+                    city=o.city_regency or '',
+                    rating=o.business_rating or 0,
+                    review_count=o.business_review_count or 0,
+                    distribution={},
+                    top_issues=[],
+                    ai_teaser_visible=[],
+                    ai_teaser_locked={"title": "", "count": 0},
+                    branch_selector=[],
+                ))
+    except Exception:
+        pass
+    
+    return branches
