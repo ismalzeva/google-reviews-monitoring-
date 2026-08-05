@@ -4,11 +4,13 @@ POST /search — visitor mencari bisnis publik (Google Maps) tanpa login.
 Menggunakan mock data dari app.services.discovery (TAG: mock_adapter).
 """
 
+import hashlib
 import re
 import logging
 from typing import Optional
 from flask import Blueprint, request, render_template, redirect, url_for
 from app.services.discovery import search_places
+from app.services.preview import register_dynamic_preview
 import time
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,6 @@ def _check_rate(ip: str) -> bool:
     """Return True if allowed, False if rate limited."""
     now = time.time()
     window_start = now - _RATE_WINDOW
-    # Clean old entries
     if ip in _RATE_LIMIT:
         _RATE_LIMIT[ip] = [t for t in _RATE_LIMIT[ip] if t > window_start]
     else:
@@ -40,6 +41,11 @@ def _check_rate(ip: str) -> bool:
         return False
     _RATE_LIMIT[ip].append(now)
     return True
+
+
+def _dynamic_place_id(query: str) -> str:
+    """Generate a deterministic place_id from query text for dynamic previews."""
+    return "dynamic:md5:" + hashlib.md5(query.strip().lower().encode()).hexdigest()[:16]
 
 
 @bp.route("/search", methods=["GET", "POST"])
@@ -73,7 +79,7 @@ def search():
                                 place_id=resolved["place_id"])
                     )
 
-                results = search_places(query, city, live_search=True, timeout=12)
+                results = search_places(query, city, live_search=False)
 
                 # Single result → redirect to public preview
                 if len(results) == 1:
@@ -85,11 +91,15 @@ def search():
                     )
 
                 if len(results) == 0:
-                    error = f"Tidak ditemukan hasil untuk \"{query}\". Coba:"
-                    # Provide suggestions
-                    suggestions = _get_suggestions(query)
-                    if suggestions:
-                        error += " " + ", ".join(suggestions)
+                    # No results → create dynamic preview for ANY brand name
+                    place_id = _dynamic_place_id(query)
+                    display_name = query.upper() if query.isascii() else query.title()
+                    register_dynamic_preview(place_id, display_name)
+                    return redirect(
+                        url_for("public_preview.preview_page",
+                                q=display_name,
+                                place_id=place_id)
+                    )
 
     # GET: show search page with optional ?q=
     if request.method == "GET":
@@ -104,7 +114,7 @@ def search():
                             place_id=resolved["place_id"])
                 )
 
-            results = search_places(query, city, live_search=True, timeout=12)
+            results = search_places(query, city, live_search=False)
             searched = True
             if len(results) == 1:
                 r = results[0]
@@ -121,10 +131,15 @@ def search():
                                 q=resolved["display_name"],
                                 place_id=resolved["place_id"])
                     )
-                error = f"Tidak ditemukan hasil untuk \"{query}\"."
-                suggestions = _get_suggestions(query)
-                if suggestions:
-                    error += " Coba: " + ", ".join(suggestions)
+                # No results → create dynamic preview for ANY brand name
+                place_id = _dynamic_place_id(query)
+                display_name = query.upper() if query.isascii() else query.title()
+                register_dynamic_preview(place_id, display_name)
+                return redirect(
+                    url_for("public_preview.preview_page",
+                            q=display_name,
+                            place_id=place_id)
+                )
 
     return render_template(
         "landing/search.html",
@@ -139,31 +154,14 @@ def search():
     )
 
 
-def _get_suggestions(query: str) -> list[str]:
-    """Give fallback suggestions for empty results."""
-    q = query.lower()
-    suggestions = []
-    if "bubur" in q:
-        suggestions.append('"Bubur Fay"')
-    if any(w in q for w in ["bubur", "makanan", "restoran"]):
-        suggestions.append('"Bubur Fay Bekasi"')
-    if any(w in q for w in ["kopi", "cafe", "kafe", "coffee"]):
-        suggestions.append('"Kopi Ketjil"')
-    if not suggestions:
-        suggestions = ['"Bubur Fay"', '"Bubur Fay Bekasi"', '"Kopi Ketjil"']
-    return suggestions
-
-
 def _find_resolved_place(query: str) -> Optional[dict]:
     """Find a place resolved from a Google Maps short link by name match."""
     q = query.lower().strip()
     for place_id, info in _RESOLVED_PLACES.items():
         if info["display_name"].lower() == q or q in info["display_name"].lower():
             return {"place_id": place_id, "display_name": info["display_name"]}
-        # Also check if query substring matches (e.g., user typed just "uncle house")
         if info["display_name"].lower().startswith(q):
             return {"place_id": place_id, "display_name": info["display_name"]}
-    # Direct place_id lookup
     if query in _RESOLVED_PLACES:
         info = _RESOLVED_PLACES[query]
         return {"place_id": query, "display_name": info["display_name"]}
@@ -177,19 +175,15 @@ def _parse_query(raw: str) -> str:
     The resolved place_id is stored for downstream preview use.
     """
     raw = raw.strip()
-    # Google Maps short link → resolve redirect to get full URL
     if "maps.app.goo.gl" in raw or "goo.gl/maps" in raw:
         resolved = _resolve_google_maps_short_link(raw)
         if resolved:
             return resolved
-        # Fallback: return raw URL (will be used as-is in search, limited to mock)
         return raw
-    # Full Google Maps URL with place name
     m = re.search(r'/place/([^/@]+)', raw)
     if m:
         name = m.group(1).replace('+', ' ').strip()
         return name
-    # maps.google.com/?q=...
     m = re.search(r'[?&]q=([^&]+)', raw)
     if m and ('google.com/maps' in raw or 'maps.google' in raw):
         return m.group(1).replace('+', ' ').strip()
@@ -200,41 +194,51 @@ def _resolve_google_maps_short_link(url: str) -> Optional[str]:
     """Follow a maps.app.goo.gl redirect to extract place name and place_id.
 
     Returns the business name on success, None on failure.
-    The place_id is registered for dynamic preview.
+    Stores resolved place info in _RESOLVED_PLACES for downstream use.
     """
     import urllib.request
     import urllib.error
-    from app.services.preview import register_dynamic_preview
+
     try:
-        req = urllib.request.Request(url, method='HEAD')
-        resp = urllib.request.urlopen(req, timeout=5)
+        req = urllib.request.Request(url, method="HEAD")
+        req.add_header("User-Agent",
+                       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+        resp = urllib.request.urlopen(req, timeout=8)
         final_url = resp.geturl()
-    except Exception as e:
-        logger.warning("Failed to resolve short link %s: %s", url, e)
+
+        # Extract place name: /place/NAME/
+        name_m = re.search(r'/place/([^/@]+)', final_url)
+        place_name = name_m.group(1).replace('+', ' ').strip() if name_m else None
+
+        # Extract feature ID: ftid=0x... or !1s0x...
+        ftid_m = re.search(r'ftid=(0x[0-9a-f]+:0x[0-9a-f]+)', final_url)
+        if not ftid_m:
+            ftid_m = re.search(r'!1s(0x[0-9a-f]+:0x[0-9a-f]+)', final_url)
+
+        if ftid_m and place_name:
+            feature_id = ftid_m.group(1)
+            _RESOLVED_PLACES[feature_id] = {
+                "display_name": place_name,
+                "google_maps_uri": url,
+            }
+            # Also index by name for lookup
+            _RESOLVED_PLACES[place_name.lower()] = {
+                "display_name": place_name,
+                "google_maps_uri": url,
+            }
+            logger.info(
+                "Short link resolved: %s → name=%s feature_id=%s",
+                url, place_name, feature_id,
+            )
+            # Register dynamic preview now so preview page can render it
+            register_dynamic_preview(feature_id, place_name, google_maps_uri=url)
+            return place_name
+
+        logger.warning("Short link resolved but no place data extracted: %s", final_url)
         return None
-
-    # Extract feature ID: !1s0xHEX:0xHEX or !1sNON_EXCLAMATION
-    fid_match = re.search(r'!1s([^!]+)', final_url)
-    feature_id = fid_match.group(1) if fid_match else None
-
-    # Extract place name from URL path
-    name_match = re.search(r'/place/([^/@]+)', final_url)
-    place_name = name_match.group(1).replace('+', ' ').strip() if name_match else None
-
-    logger.info("Short link resolved: %s → name=%s feature_id=%s", url, place_name, feature_id)
-
-    if feature_id and place_name:
-        # Register for dynamic preview
-        register_dynamic_preview(
-            place_id=feature_id,
-            display_name=place_name,
-            google_maps_uri=url,
-        )
-        # Also store in module-level cache for search fallback
-        _RESOLVED_PLACES[feature_id] = {
-            "display_name": place_name,
-            "google_maps_uri": url,
-        }
-        return place_name
-
-    return place_name or url
+    except urllib.error.URLError as exc:
+        logger.warning("Short link resolve failed for %s: %s", url, exc)
+        return None
+    except Exception as exc:
+        logger.error("Unexpected error resolving %s: %s", url, exc)
+        return None
