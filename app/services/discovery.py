@@ -304,9 +304,10 @@ def search_places(business_name: str, city: str = None, timeout: float | None = 
 
     Flow:
       1. Check file cache → hit → <5ms response (KPI: <5s ✅)
-      2. Try Apify (8s timeout per actor run)   (KPI: <10s ✅)
-      3. Cache Apify results to disk
-      4. Fallback to mock on failure              (KPI: <2s ✅)
+      2. Try Google Places API (6s timeout, real results)
+      3. Try Apify (8s timeout per actor run)
+      4. Cache results to disk
+      5. Fallback to mock on failure              (KPI: <2s ✅)
 
     ``timeout`` overrides the adapter timeout for this call (seconds).
     Use for public-facing calls where < 10s response is required.
@@ -330,7 +331,44 @@ def search_places(business_name: str, city: str = None, timeout: float | None = 
         )
         return cached
 
-    # ── Step 2: Live Apify discovery ─────────────────────
+    # ── Step 2: Google Places API (fast, authoritative) ──
+    google_key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
+    if google_key:
+        try:
+            from app.adapters.google_places_adapter import GooglePlacesAdapter
+            gp = GooglePlacesAdapter(api_key=google_key, timeout=6)
+            places = gp.search_places(query=business_name, max_results=10)
+            if places:
+                source = "google_places"
+                _cache_set(business_name, places, city)
+                elapsed = (time.perf_counter() - t0) * 1000
+                for r in places:
+                    r["response_time_ms"] = round(elapsed)
+                    r["source"] = source
+                    r.setdefault("primary_type", r.get("types", [""])[0] if r.get("types") else "business")
+                    r.setdefault("search_region", "")
+                    r.setdefault("phone", "")
+                    r.setdefault("website", "")
+                    r.setdefault("business_status", r.get("business_status") or "OPERATIONAL")
+                    # Template expects these names
+                    r["review_count"] = r.get("user_ratings_total", 0)
+                    r["display_name"] = r.get("name", "")
+                logger.info(
+                    "Google Places OK: %d results for '%s' in %.0fms",
+                    len(places), business_name, elapsed,
+                )
+                return places
+            logger.info(
+                "Google Places ZERO_RESULTS for '%s' — trying next source",
+                business_name,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Google Places failed for '%s' — %s (falling to next source)",
+                business_name, exc,
+            )
+
+    # ── Step 3: Live Apify discovery ─────────────────────
     if live_search:
         try:
             from app.services.public_provider import build_public_review_adapter
@@ -371,7 +409,7 @@ def search_places(business_name: str, city: str = None, timeout: float | None = 
                 business_name, exc,
             )
 
-    # ── Step 3: Fallback to mock data ────────────────────
+    # ── Step 4: Fallback to mock data ────────────────────
     results = []
     query = business_name.lower()
     for c in _MOCK_CANDIDATES:
