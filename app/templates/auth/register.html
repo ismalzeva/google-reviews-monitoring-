@@ -114,6 +114,38 @@
     }
     .password-hint.valid { color: var(--success); }
 
+    /* ─── Password toggle (HF-003) ──────────────────────── */
+    .password-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    .password-wrapper input {
+        padding-right: 48px;
+    }
+    .password-toggle {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        padding: 4px;
+        font-size: 16px;
+        line-height: 1;
+        transition: color 0.15s;
+    }
+    .password-toggle:hover {
+        color: var(--text);
+    }
+    .password-toggle:focus-visible {
+        outline: 2px solid var(--orange);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+
     /* ─── Buttons ───────────────────────────────────────── */
     .wizard-buttons {
         display: flex; gap: 10px; margin-top: 8px;
@@ -213,10 +245,15 @@
 
             <div class="field-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password"
-                       placeholder="Minimal 8 karakter"
-                       minlength="8" autocomplete="new-password"
-                       class="{{ 'error' if error and 'Password' in error }}">
+                <div class="password-wrapper">
+                    <input type="password" id="password" name="password"
+                           placeholder="Minimal 8 karakter"
+                           minlength="8" autocomplete="new-password"
+                           class="{{ 'error' if error and 'Password' in error }}">
+                    <button type="button" class="password-toggle" id="pw-toggle"
+                            aria-label="Tampilkan password" title="Tampilkan password"
+                            tabindex="0">👁</button>
+                </div>
                 <div class="password-hint" id="pw-hint">🔒 Minimal 8 karakter</div>
                 <div class="field-error" id="pw-error"></div>
             </div>
@@ -323,6 +360,18 @@
     const nameEl = document.getElementById('display_name');
     const btn = document.getElementById('step1-btn');
     const pwHint = document.getElementById('pw-hint');
+    const pwToggle = document.getElementById('pw-toggle');
+
+    // HF-003: Password toggle
+    if (pwToggle) {
+        pwToggle.addEventListener('click', function() {
+            const isPassword = pwEl.type === 'password';
+            pwEl.type = isPassword ? 'text' : 'password';
+            pwToggle.textContent = isPassword ? '🙈' : '👁';
+            pwToggle.setAttribute('aria-label', isPassword ? 'Sembunyikan password' : 'Tampilkan password');
+            pwToggle.setAttribute('title', isPassword ? 'Sembunyikan password' : 'Tampilkan password');
+        });
+    }
 
     function validate() {
         let valid = true;
