@@ -3,6 +3,9 @@
 Flow: Welcome → Step 1 (Add Outlet) → Step 2 (Verify) → Step 3 (Sync) → Step 4 (WOW).
 """
 import logging
+import threading
+import time
+import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, render_template, redirect, url_for, request, jsonify, session
@@ -16,6 +19,7 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('trial', __name__, url_prefix='/trial')
 
 _SYNC_PROGRESS = {}
+_PROGRESS_TTL_SECONDS = 3600
 
 
 def _now():
@@ -287,6 +291,17 @@ def step3_sync():
                            total_steps=4, outlet=outlet)
 
 
+def build_public_review_adapter(source=None):
+    """HF-006: Public adapter builder used by trial step3 sync.
+
+    Thin re-export so tests can patch a single trial-module entrypoint and so
+    the sync path is explicit about using the PUBLIC provider (place_id-based,
+    no Google OAuth) — never the GBP path.
+    """
+    from app.services.public_provider import build_public_review_adapter as _build
+    return _build(source)
+
+
 @bp.route('/activate/step3/start', methods=['POST'])
 @login_required
 def step3_start_sync():
@@ -295,50 +310,87 @@ def step3_start_sync():
     if not biz or not outlet_id:
         return jsonify({'error': 'Sesi tidak valid'}), 400
 
-    outlet = Outlet.query.get(outlet_id)
+    # HF-006 fail-closed ownership check: the session outlet must belong to
+    # THIS business+tenant. Session tampering must never touch other tenants.
+    outlet = Outlet.query.filter_by(
+        id=outlet_id, tenant_id=biz.tenant_id, business_id=biz.id,
+    ).first()
     if not outlet:
         return jsonify({'error': 'Outlet tidak ditemukan'}), 404
 
-    import uuid
+    now = time.time()
+    existing = _SYNC_PROGRESS.get(outlet_id)
+    if (
+        isinstance(existing, dict)
+        and existing.get('status') == 'running'
+        and now - existing.get('created_ts', 0) < _PROGRESS_TTL_SECONDS
+    ):
+        # HF-006 idempotent start: reuse the running task instead of spawning
+        # a parallel duplicate sync for the same outlet.
+        return jsonify({'task_id': existing['task_id']})
+    if isinstance(existing, dict) and now - existing.get('created_ts', 0) >= _PROGRESS_TTL_SECONDS:
+        _SYNC_PROGRESS.pop(outlet_id, None)
+
     task_id = str(uuid.uuid4())
-    _SYNC_PROGRESS[task_id] = {
-        'status': 'running', 'total': outlet.business_review_count or 0,
+    _SYNC_PROGRESS[outlet_id] = {
+        'task_id': task_id, 'status': 'running',
+        'total': outlet.business_review_count or 0,
         'synced': 0, 'percent': 0, 'error': None,
+        'created_ts': now,
     }
 
     _log_event('first_sync_started', biz, {'outlet': outlet.name})
 
-    import threading
-
-    # Capture the real Flask app object for background thread context
+    # HF-006: capture PRIMITIVES before starting the worker thread — the
+    # worker never touches ORM instances from another thread's session.
     _app = current_app._get_current_object()
+    tenant_id = biz.tenant_id
+    business_id = biz.id
 
     def _run_sync():
         with _app.app_context():
             try:
-                from app.services.sync_service import sync_reviews
-                with db.session() as s:
-                    result = sync_reviews(
-                        tenant_id=biz.tenant_id, business_id=biz.id,
-                        source='public_scraping',
-                        outlet_ids=[outlet.id],
+                from app.services.sync_service import sync_public_reviews
+                adapter = build_public_review_adapter()
+                result = sync_public_reviews(
+                    tenant_id=tenant_id,
+                    business_id=business_id,
+                    outlet_ids=[outlet_id],
+                    adapter=adapter,
+                    source=getattr(adapter, 'source_name', None),
+                )
+                failed = result.get('locations_failed', 0)
+                succeeded = result.get('locations_succeeded', 0)
+                if failed and not succeeded:
+                    raise RuntimeError(
+                        '; '.join(
+                            e.get('error', 'sync error')
+                            for e in (result.get('errors') or [])
+                        ) or 'sync failed'
                     )
-                    synced = result.get('reviews_created', 0) + result.get('reviews_updated', 0)
-                    _SYNC_PROGRESS[task_id] = {
-                        'status': 'done', 'total': result.get('reviews_received', 0),
-                        'synced': synced, 'percent': 100, 'error': None,
-                    }
-                    _log_event('first_sync_completed', biz, {
-                        'outlet': outlet.name,
-                        'reviews_synced': synced,
-                    })
+                synced = result.get('reviews_created', 0) + result.get('reviews_updated', 0)
+                _SYNC_PROGRESS[outlet_id] = {
+                    'task_id': task_id, 'status': 'done',
+                    'total': result.get('reviews_received', 0),
+                    'synced': synced, 'percent': 100, 'error': None,
+                    'created_ts': time.time(),
+                }
+                with db.session() as s:
+                    biz_row = s.get(Business, business_id)
+                    if biz_row is not None:
+                        progress = _parse_progress(biz_row.setup_progress)
+                        if progress.get('step3') != 'done':
+                            progress['step3'] = 'done'
+                            biz_row.setup_progress = _write_progress(progress)
+                            s.commit()
             except Exception as e:
-                logger.error("Trial step3 sync failed for biz=%s outlet=%s: %s",
-                             biz.id, outlet.name, e, exc_info=True)
-                _SYNC_PROGRESS[task_id] = {
-                    'status': 'error', 'total': 0, 'synced': 0,
-                    'percent': 0,
+                logger.error("Trial step3 public sync failed for biz=%s outlet=%s: %s",
+                             business_id, outlet_id, e, exc_info=True)
+                _SYNC_PROGRESS[outlet_id] = {
+                    'task_id': task_id, 'status': 'error', 'total': 0,
+                    'synced': 0, 'percent': 0,
                     'error': 'Sinkronisasi gagal. Periksa koneksi internet Anda dan coba lagi.',
+                    'created_ts': time.time(),
                 }
 
     threading.Thread(target=_run_sync, daemon=True).start()
@@ -348,14 +400,34 @@ def step3_start_sync():
 @bp.route('/activate/step3/progress/<task_id>')
 @login_required
 def step3_progress(task_id):
-    info = _SYNC_PROGRESS.get(task_id, {'status': 'unknown'})
-    if info['status'] == 'done' or info['status'] == 'error':
-        # Mark step3 as done
-        biz = _get_business()
-        if biz and info['status'] == 'done':
-            _update_progress(biz, 'step3')
-        _SYNC_PROGRESS.pop(task_id, None)
-    return jsonify(info)
+    _purge_stale_progress()
+    info = None
+    for entry in _SYNC_PROGRESS.values():
+        if isinstance(entry, dict) and entry.get('task_id') == task_id:
+            info = entry
+            break
+    if info is None:
+        info = {'status': 'unknown'}
+    payload = {
+        'status': info['status'],
+        'total': info.get('total', 0),
+        'synced': info.get('synced', 0),
+        'percent': info.get('percent', 0),
+    }
+    if info.get('error'):
+        payload['error'] = info['error']
+    return jsonify(payload)
+
+
+def _purge_stale_progress():
+    """HF-006: bound the progress store — drop entries older than TTL."""
+    cutoff = time.time() - _PROGRESS_TTL_SECONDS
+    stale = [
+        k for k, v in _SYNC_PROGRESS.items()
+        if not isinstance(v, dict) or v.get('created_ts', 0) < cutoff
+    ]
+    for k in stale:
+        _SYNC_PROGRESS.pop(k, None)
 
 
 @bp.route('/activate/step4')
