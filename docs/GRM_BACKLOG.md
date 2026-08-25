@@ -581,6 +581,23 @@ Mengubah visitor yang sudah lihat preview → daftar → trial aktif dalam <3 me
 
 ---
 
+### Feature 4.x: Security Hardening Follow-up (dari audit HF-005 / GRM-T05)
+
+#### GRM-025: Preview Cache Key Delimiter Sanitization
+
+- **Objective:** Sanitasi karakter delimiter `:` pada place_id di `normalize_place_id()` / `_cache_key()` agar tidak mungkin terjadi tabrakan namespace cache key lintas tenant secara teoretis (place_id buatan seperti `X:tenant:<uuid>`).
+- **Source:** Temuan LOW dari Auditor independen HF-005 (GRM-T05_AUDITOR_REVIEW.md, 2026-08-25). Tidak exploitable dalam praktik saat ini — eksploitasi membutuhkan penyerang mengetahui UUID tenant korban DAN owner terautentikasi melakukan fetch place_id buatan tersebut. Dicatat sebagai task terpisah; TIDAK diperbaiki dalam scope T05.
+- **Acceptance Criteria:**
+  - [ ] `normalize_place_id` menolak atau menghapus/encode karakter `:` dari place_id
+  - [ ] Unit test: place_id mengandung `:tenant:<uuid>` tidak pernah menghasilkan cache key yang identik dengan tenant key asli milik tenant lain
+  - [ ] Regression tests/gate_hf005.py tetap hijau setelah perubahan
+- **Dependency:** Tidak ada (independen)
+- **Priority:** P3
+- **Estimasi:** S
+- **Status:** Todo
+
+---
+
 ## Dependency Map
 
 ```
