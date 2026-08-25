@@ -20,12 +20,20 @@ _cache: dict[str, dict] = {}
 _cache_ttl: int = 86400  # 24 jam
 
 
-def _cache_key(place_id: str) -> str:
+def _cache_key(place_id: str, tenant_id: Optional[str] = None) -> str:
+    """HF-005: Tenant-scoped real data MUST use tenant-specific cache key.
+
+    Plain key (`preview:{place_id}`) holds ONLY static mock data.
+    Tenant key (`preview:{place_id}:tenant:{uuid}`) holds tenant-scoped real
+    data — collision across tenants impossible because tenant_id is a UUID.
+    """
+    if tenant_id:
+        return f"preview:{place_id}:tenant:{tenant_id}"
     return f"preview:{place_id}"
 
 
-def _cache_get(place_id: str) -> Optional[dict]:
-    key = _cache_key(place_id)
+def _cache_get(place_id: str, tenant_id: Optional[str] = None) -> Optional[dict]:
+    key = _cache_key(place_id, tenant_id)
     entry = _cache.get(key)
     if entry and entry["_expires"] > time.time():
         return entry["_data"]
@@ -34,8 +42,9 @@ def _cache_get(place_id: str) -> Optional[dict]:
     return None
 
 
-def _cache_set(place_id: str, data: dict) -> None:
-    _cache[_cache_key(place_id)] = {"_data": data, "_expires": time.time() + _cache_ttl}
+def _cache_set(place_id: str, data: dict, tenant_id: Optional[str] = None) -> None:
+    key = _cache_key(place_id, tenant_id)
+    _cache[key] = {"_data": data, "_expires": time.time() + _cache_ttl}
 
 
 # ---------------------------------------------------------------------------
@@ -294,40 +303,58 @@ def _try_alternate_format(place_id: str) -> Optional[str]:
     return None
 
 
-def get_preview_data(place_id: str) -> Optional[MockPreview]:
+def get_preview_data(place_id: str, tenant_id: Optional[str] = None) -> Optional[MockPreview]:
     """Retrieve preview data for a place_id (cache-first).
 
-    Priority: real DB data → mock data → None.
+    HF-005 FAIL-CLOSED contract:
+    - tenant_id provided → real data ONLY from that tenant (tenant-scoped
+      query + tenant-scoped cache key). Mock fallback allowed.
+    - tenant_id=None → NO real-data query at all. Mock/static data only.
+      Never picks an outlet from any tenant, never returns another
+      tenant's branch selector.
+
+    Callers that need real data MUST pass tenant_id.
     """
     place_id = normalize_place_id(place_id)
     if not place_id:
         return None
 
-    cached = _cache_get(place_id)
+    # 1. Tenant-scoped real data (only when caller proves tenant)
+    real = None
+    if tenant_id:
+        # Cache lookup scoped to this tenant only — cannot collide with
+        # other tenants or with the anonymous mock cache namespace.
+        cached = _cache_get(place_id, tenant_id)
+        if cached:
+            logger.info("preview cache hit for %s (tenant)", place_id)
+            return MockPreview(**cached)
+
+        real = _from_real_outlet(place_id, tenant_id=tenant_id)
+        if real:
+            _cache_set(place_id, {
+                "place_id": real.place_id,
+                "display_name": real.display_name,
+                "formatted_address": real.formatted_address,
+                "city": real.city,
+                "rating": real.rating,
+                "review_count": real.review_count,
+                "distribution": real.distribution,
+                "top_issues": real.top_issues,
+                "ai_teaser_visible": real.ai_teaser_visible,
+                "ai_teaser_locked": real.ai_teaser_locked,
+                "branch_selector": real.branch_selector,
+            }, tenant_id=tenant_id)
+            logger.info("preview REAL hit for %s (%s, %d reviews)",
+                        place_id, real.display_name, real.review_count)
+            return real
+
+    # 2. Anonymous / no-real-data path: static mock data ONLY.
+    #    Cache key has NO tenant component → holds only static content.
+    cached = _cache_get(place_id, None)
     if cached:
         logger.info("preview cache hit for %s", place_id)
         return MockPreview(**cached)
 
-    # 1. Try real database data first
-    real = _from_real_outlet(place_id)
-    if real:
-        _cache_set(place_id, {
-            "place_id": real.place_id,
-            "display_name": real.display_name,
-            "formatted_address": real.formatted_address,
-            "city": real.city,
-            "rating": real.rating,
-            "review_count": real.review_count,
-            "distribution": real.distribution,
-            "top_issues": real.top_issues,
-            "ai_teaser_visible": real.ai_teaser_visible,
-            "ai_teaser_locked": real.ai_teaser_locked,
-            "branch_selector": real.branch_selector,
-        })
-        logger.info("preview REAL hit for %s (%s, %d reviews)", place_id, real.display_name, real.review_count)
-        return real
-
-    # 2. Fall back to mock data
     mock = MOCK_BRANCHES.get(place_id)
     if not mock:
         alt_id = _try_alternate_format(place_id)
@@ -348,7 +375,7 @@ def get_preview_data(place_id: str) -> Optional[MockPreview]:
             "ai_teaser_visible": mock.ai_teaser_visible,
             "ai_teaser_locked": mock.ai_teaser_locked,
             "branch_selector": mock.branch_selector,
-        })
+        }, tenant_id=None)
         logger.info("preview mock hit for %s (%s)", place_id, mock.display_name)
         return mock
 
@@ -522,72 +549,110 @@ def _group_issues(neg_reviews: list, total: int) -> list[dict]:
     ]
 
 
-def _from_real_outlet(place_id: str) -> Optional[MockPreview]:
+def _from_real_outlet(place_id: str, tenant_id: Optional[str] = None) -> Optional[MockPreview]:
     """Build MockPreview from real database outlet + reviews.
 
     Only used when an outlet with matching public_place_id exists and has reviews.
+
+    HF-005: When tenant_id is provided, scope query to that tenant only.
+    Prevents cross-tenant data leakage in preview.
     """
     try:
-        from app.models.entities import Outlet, Review, Business
         from app import create_app
-        from collections import Counter
+        from flask import current_app
+
+        # HF-005: Use existing app context if available (for testing)
+        try:
+            ctx_app = current_app._get_current_object()
+        except RuntimeError:
+            ctx_app = None
+
+        if ctx_app:
+            return _query_real_outlet(ctx_app, place_id, tenant_id)
 
         app = create_app()
         with app.app_context():
-            outlet = Outlet.query.filter_by(public_place_id=place_id).first()
-            if not outlet:
-                return None
-
-            reviews = Review.query.filter_by(outlet_id=outlet.id).all()
-            if not reviews:
-                return None
-
-            # Rating distribution
-            dist_counter = Counter()
-            for r in reviews:
-                dist_counter[r.star_rating] += 1
-            distribution = {
-                5: dist_counter.get(5, 0),
-                4: dist_counter.get(4, 0),
-                3: dist_counter.get(3, 0),
-                2: dist_counter.get(2, 0),
-                1: dist_counter.get(1, 0),
-            }
-
-            total = len(reviews)
-
-            # Negative reviews for top issues — group by keyword
-            neg_reviews = [r for r in reviews if r.star_rating <= 3]
-            top_issues = _group_issues(neg_reviews, total)
-
-            avg_rating = round(sum(r.star_rating for r in reviews) / total, 1) if total > 0 else 0
-
-            # Build branch selector from all real outlets
-            all_outlets = Outlet.query.filter(Outlet.public_place_id.isnot(None)).all()
-            branch_selector = []
-            for o in all_outlets[:10]:
-                branch_selector.append({
-                    "place_id": o.public_place_id,
-                    "name": o.name,
-                    "rating": o.business_rating or 0,
-                })
-
-            return MockPreview(
-                place_id=place_id,
-                display_name=outlet.name,
-                formatted_address=outlet.address or '',
-                city=outlet.city_regency or '',
-                rating=avg_rating,
-                review_count=total,
-                distribution=distribution,
-                top_issues=top_issues,
-                ai_teaser_visible=top_issues[:2],
-                ai_teaser_locked=top_issues[2] if len(top_issues) > 2 else {"title": "Butuh lebih banyak data review", "count": 0},
-                branch_selector=branch_selector,
-            )
+            return _query_real_outlet(app, place_id, tenant_id)
     except Exception as e:
         logger.warning("_from_real_outlet failed for %s: %s", place_id, e)
         return None
+
+
+def _query_real_outlet(app, place_id: str, tenant_id: Optional[str] = None) -> Optional[MockPreview]:
+    """Internal: query DB for real outlet data. Must be called within app context.
+
+    HF-005 FAIL-CLOSED: tenant_id is REQUIRED. Without it, this function
+    refuses to query any real outlet — returns None immediately.
+    """
+    # HF-005: FAIL-CLOSED — no tenant proof → no real data
+    if not tenant_id:
+        logger.warning(
+            "_query_real_outlet called without tenant_id for %s — refused "
+            "(fail-closed)", place_id)
+        return None
+
+    from app.models.entities import Outlet, Review
+    from collections import Counter
+
+    # HF-005: Tenant-scoped query
+    query = Outlet.query.filter_by(public_place_id=place_id)
+    if tenant_id is not None:
+        query = query.filter_by(tenant_id=tenant_id)
+    outlet = query.first()
+
+    if not outlet:
+        return None
+
+    reviews = Review.query.filter_by(outlet_id=outlet.id).all()
+    if not reviews:
+        return None
+
+    # Rating distribution
+    dist_counter = Counter()
+    for r in reviews:
+        dist_counter[r.star_rating] += 1
+    distribution = {
+        5: dist_counter.get(5, 0),
+        4: dist_counter.get(4, 0),
+        3: dist_counter.get(3, 0),
+        2: dist_counter.get(2, 0),
+        1: dist_counter.get(1, 0),
+    }
+
+    total = len(reviews)
+
+    # Negative reviews for top issues — group by keyword
+    neg_reviews = [r for r in reviews if r.star_rating <= 3]
+    top_issues = _group_issues(neg_reviews, total)
+
+    avg_rating = round(sum(r.star_rating for r in reviews) / total, 1) if total > 0 else 0
+
+    # HF-005: Build branch selector scoped to tenant
+    outlet_query = Outlet.query.filter(Outlet.public_place_id.isnot(None))
+    if tenant_id is not None:
+        outlet_query = outlet_query.filter_by(tenant_id=tenant_id)
+    all_outlets = outlet_query.all()
+    branch_selector = []
+    for o in all_outlets[:10]:
+        branch_selector.append({
+            "place_id": o.public_place_id,
+            "name": o.name,
+            "rating": o.business_rating or 0,
+        })
+
+    return MockPreview(
+        place_id=place_id,
+        display_name=outlet.name,
+        formatted_address=outlet.address or '',
+        city=outlet.city_regency or '',
+        rating=avg_rating,
+        review_count=total,
+        distribution=distribution,
+        top_issues=top_issues,
+        ai_teaser_visible=top_issues[:2],
+        ai_teaser_locked=top_issues[2] if len(top_issues) > 2 else {"title": "Butuh lebih banyak data review", "count": 0},
+        branch_selector=branch_selector,
+    )
 
 
 def get_all_branches() -> list[MockPreview]:
