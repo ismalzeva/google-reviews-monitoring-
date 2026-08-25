@@ -120,6 +120,8 @@
       Mulai Aktivasi →
     {% endif %}
   </a>
+  {% if outlet_count >= 1 %}
   <a href="{{ url_for('trial.skip') }}" class="skip-link">Lewati, langsung dashboard</a>
+  {% endif %}
 </div>
 {% endblock %}

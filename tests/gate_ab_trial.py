@@ -7,7 +7,7 @@ Must not touch GRM-001 through GRM-006 locked functionality.
 """
 import pytest
 from app import create_app, db
-from app.models.entities import User, Business
+from app.models.entities import User, Business, Outlet
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash
 
@@ -31,7 +31,7 @@ def _client(app):
 
 
 def _register_and_login(app, client, email=TEST_EMAIL, setup_complete=False,
-                        expiring_days=14, progress=None):
+                        expiring_days=14, progress=None, with_outlet=False):
     """Register a fresh trial user, login, return (user_id, business_id)."""
     with app.app_context():
         User.query.filter_by(email=email).delete()
@@ -54,6 +54,17 @@ def _register_and_login(app, client, email=TEST_EMAIL, setup_complete=False,
         user.business_id = business.id
         db.session.commit()
         uid, bid = user.id, business.id
+
+        if with_outlet:
+            outlet = Outlet(
+                tenant_id=business.tenant_id, business_id=business.id,
+                name='Test Outlet', address='Jl. Test No. 1',
+                public_place_id='ChIJTestAB',
+                business_rating=4.5, business_review_count=100,
+                monitor_enabled=True, source='public_scraping',
+            )
+            db.session.add(outlet)
+            db.session.commit()
 
     with app.test_request_context():
         client.post('/auth/login', data={
@@ -82,7 +93,8 @@ class TestGateAB_TrialWelcome:
         assert 'AI Advisor' in html
         assert 'MASA TRIAL' in html
         assert 'Mulai Aktivasi' in html or 'Lanjutkan' in html
-        assert 'Lewati' in html
+        # HF-004: skip link only visible for users with outlets
+        # This test user has no outlets, so 'Lewati' should NOT appear
 
     def test_welcome_trial_status_active(self, app_context):
         """AC-7: Trial status 'Aktif' when >3 days remaining."""
@@ -155,10 +167,10 @@ class TestGateAB_DashboardLock:
 class TestGateAB_Skip:
 
     def test_skip_sets_setup_complete(self, app_context):
-        """Skip marks setup_complete=True, redirects to dashboard."""
+        """Skip marks setup_complete=True, redirects to dashboard (HF-004: requires outlet)."""
         app = app_context
         client = _client(app)
-        _, bid = _register_and_login(app, client, setup_complete=False)
+        _, bid = _register_and_login(app, client, setup_complete=False, with_outlet=True)
 
         resp = client.get('/trial/skip')
         assert resp.status_code == 302

@@ -407,15 +407,59 @@ def step4_wow():
                            review_count=review_count)
 
 
+def _is_skip_eligible(biz: Business) -> bool:
+    """HF-004: Check if user can skip activation.
+
+    Eligible: user has at least one monitored outlet (from GBP match,
+    prior setup, or discovery). These users have already completed the
+    core value step (outlet selection) and don't need to repeat it.
+
+    Ineligible: user has no outlets — must complete activation flow
+    to select and verify their outlet.
+    """
+    if not biz:
+        return False
+    # Already complete — no need to skip
+    if biz.setup_complete:
+        return False
+    # Has at least one monitored outlet → eligible
+    return biz.outlet_count >= 1
+
+
 @bp.route('/skip')
 @login_required
 def skip():
-    """Skip activation → go to dashboard (with trial banner)."""
+    """HF-004: Skip activation with eligibility guard.
+
+    Eligible users (have existing outlets) → skip to dashboard.
+    Ineligible users (no outlets) → redirect to activation flow.
+    Already-complete users → redirect to dashboard (idempotent).
+    """
     biz = _get_business()
-    if biz and not biz.setup_complete:
-        biz.setup_complete = True
-        biz.wow_moment_reached_at = _now()
-        biz.setup_progress = {'step1': 'skipped', 'step2': 'skipped',
-                              'step3': 'skipped', 'step4': 'skipped'}
-        db.session.commit()
+
+    # Idempotent: already complete → dashboard
+    if biz and biz.setup_complete:
+        return redirect(url_for('dashboard.index'))
+
+    # No business → dashboard (safety)
+    if not biz:
+        return redirect(url_for('dashboard.index'))
+
+    # Eligibility check
+    if not _is_skip_eligible(biz):
+        # Ineligible → redirect to activation flow
+        return redirect(url_for('trial.activate'))
+
+    # Eligible → skip activation
+    biz.setup_complete = True
+    biz.wow_moment_reached_at = _now()
+    biz.setup_progress = _write_progress({
+        'step1': 'skipped', 'step2': 'skipped',
+        'step3': 'skipped', 'step4': 'skipped',
+    })
+    db.session.commit()
+    _log_event('activation_skipped', biz, {
+        'reason': 'eligible_user_with_outlets',
+        'outlet_count': biz.outlet_count,
+    })
     return redirect(url_for('dashboard.index'))
