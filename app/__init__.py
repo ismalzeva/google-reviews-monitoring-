@@ -47,14 +47,22 @@ def create_app(config_name=None):
     from app.routes.discovery import bp as discovery_bp
     app.register_blueprint(discovery_bp)
 
-    from app.routes.google import google_bp
-    app.register_blueprint(google_bp)
+    from app.services.feature_flags import is_grm_manage_enabled
+    if is_grm_manage_enabled():
+        # GRM Manage (Google OAuth connect + reply draft/approval/publish).
+        # Gated by GRM_MANAGE_ENABLED — see app/services/feature_flags.py.
+        # Off by default per GRM_PRODUCT_MASTER skill §3: OAuth / direct
+        # reply / auto-reply must not activate without an explicit owner
+        # decision. When off, these routes are not registered — they 404,
+        # independent of whether GOOGLE_CLIENT_ID/SECRET are configured.
+        from app.routes.google import google_bp
+        app.register_blueprint(google_bp)
+
+        from app.routes.response import response_bp
+        app.register_blueprint(response_bp)
 
     from app.routes.review import review_bp
     app.register_blueprint(review_bp)
-
-    from app.routes.response import response_bp
-    app.register_blueprint(response_bp)
 
     from app.routes.issue import issue_bp
     app.register_blueprint(issue_bp)
