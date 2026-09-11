@@ -13,6 +13,20 @@ logger = logging.getLogger(__name__)
 response_bp = Blueprint('response', __name__)
 
 
+def _tenant_id():
+    """Tenant id of the logged-in user's business.
+
+    BUGFIX: routes below used to read `current_user.tenant_id` directly,
+    but the User model has no `tenant_id` column/property (only
+    `business_id`) — every call raised AttributeError -> 500. The correct
+    path, used elsewhere in the codebase, is `current_user.business.tenant_id`.
+    Returns None when the user has no business bound; callers compare this
+    against a review's tenant_id, so None safely fails closed (denied)
+    rather than raising.
+    """
+    return current_user.business.tenant_id if current_user.business else None
+
+
 def _reply_to_json(reply: ReviewReply) -> dict:
     return {
         'id': reply.id,
@@ -43,7 +57,7 @@ def get_reply(review_id: str):
         return jsonify({'success': False, 'errors': [{'code': 'NOT_FOUND', 'message': 'No reply found'}]}), 404
 
     review = db.session.get(Review, review_id)
-    if review and review.tenant_id != current_user.tenant_id:
+    if review and review.tenant_id != _tenant_id():
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'Cross-tenant access denied'}]}), 403
 
     return jsonify({
@@ -63,7 +77,7 @@ def generate_draft(review_id: str):
     if not review:
         return jsonify({'success': False, 'errors': [{'code': 'NOT_FOUND', 'message': 'Review not found'}]}), 404
 
-    if review.tenant_id != current_user.tenant_id:
+    if review.tenant_id != _tenant_id():
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'Cross-tenant access denied'}]}), 403
 
     # Get analysis
@@ -100,7 +114,7 @@ def approve_reply(review_id: str, reply_id: str):
         return jsonify({'success': False, 'errors': [{'code': 'NOT_FOUND', 'message': 'Reply not found'}]}), 404
 
     review = db.session.get(Review, review_id)
-    if review and review.tenant_id != current_user.tenant_id:
+    if review and review.tenant_id != _tenant_id():
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'Cross-tenant access denied'}]}), 403
 
     data = request.get_json(silent=True) or {}
@@ -126,7 +140,7 @@ def reject_reply(review_id: str, reply_id: str):
         return jsonify({'success': False, 'errors': [{'code': 'NOT_FOUND', 'message': 'Reply not found'}]}), 404
 
     review = db.session.get(Review, review_id)
-    if review and review.tenant_id != current_user.tenant_id:
+    if review and review.tenant_id != _tenant_id():
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'Cross-tenant access denied'}]}), 403
 
     data = request.get_json(silent=True) or {}
@@ -150,7 +164,7 @@ def publish_reply(review_id: str, reply_id: str):
         return jsonify({'success': False, 'errors': [{'code': 'NOT_FOUND', 'message': 'Reply not found'}]}), 404
 
     review = db.session.get(Review, review_id)
-    if review and review.tenant_id != current_user.tenant_id:
+    if review and review.tenant_id != _tenant_id():
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'Cross-tenant access denied'}]}), 403
 
     try:
@@ -194,7 +208,7 @@ def edit_reply(review_id: str, reply_id: str):
         return jsonify({'success': False, 'errors': [{'code': 'NOT_FOUND', 'message': 'Reply not found'}]}), 404
 
     review = db.session.get(Review, review_id)
-    if review and review.tenant_id != current_user.tenant_id:
+    if review and review.tenant_id != _tenant_id():
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'Cross-tenant access denied'}]}), 403
 
     data = request.get_json(silent=True) or {}
@@ -219,7 +233,7 @@ def response_metrics():
     business_id = request.args.get('business_id')
 
     data = get_response_metrics(
-        tenant_id=current_user.tenant_id,
+        tenant_id=_tenant_id(),
         business_id=business_id,
         days=days,
     )
