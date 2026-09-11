@@ -15,8 +15,15 @@ issue_bp = Blueprint('issue', __name__)
 
 
 def _require_tenant():
-    """Get current user's tenant or abort."""
-    tenant_id = getattr(current_user, 'tenant_id', None)
+    """Get current user's tenant or abort.
+
+    BUGFIX: this used to read getattr(current_user, 'tenant_id', None) —
+    the User model has no tenant_id attribute (only business_id), so this
+    always silently returned None (getattr's default), and every route in
+    this blueprint always fell through to a 403. The correct path, used
+    elsewhere in the codebase, is current_user.business.tenant_id.
+    """
+    tenant_id = current_user.business.tenant_id if current_user.business else None
     if not tenant_id:
         return jsonify({'success': False, 'errors': [{'code': 'FORBIDDEN', 'message': 'No tenant'}]}), 403
     return tenant_id
