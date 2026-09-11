@@ -9,12 +9,12 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from functools import wraps
 
 from flask import (
-    Blueprint, render_template, request, jsonify, session,
+    Blueprint, render_template, request, jsonify,
     redirect, url_for, flash, current_app
 )
+from flask_login import login_required, current_user
 
 from app import db
 from app.models.entities import (
@@ -37,20 +37,26 @@ logger = logging.getLogger(__name__)
 # ─── HELPERS ──────────────────────────────────────────
 
 def _get_tenant():
-    return session.get("tenant_id") or request.headers.get("X-Tenant-ID")
+    """Tenant id of the logged-in user's business.
+
+    BUGFIX: this used to read session['tenant_id'], but nothing in the app
+    ever sets that session key — login goes through flask_login.login_user()
+    (app/routes/auth.py), which stores its own '_user_id' key, never a plain
+    'tenant_id' / 'business_id' / 'user_id'. As a result every route in this
+    blueprint either always redirected back to login (the old _require_auth
+    checked session['user_id'], which was never present) or, if that check
+    were bypassed, ran with tenant_id/business_id = None. Fixed to read
+    current_user like the rest of the app (dashboard.py, public.py,
+    google.py, trial.py, ...).
+    """
+    if not current_user.is_authenticated or not current_user.business:
+        return None
+    return current_user.business.tenant_id
 
 
 def _get_business():
-    return session.get("business_id")
-
-
-def _require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if "user_id" not in session:
-            return redirect(url_for("auth.login"))
-        return f(*args, **kwargs)
-    return decorated
+    """Business id of the logged-in user. See _get_tenant() bugfix note."""
+    return current_user.business_id if current_user.is_authenticated else None
 
 
 def _get_connection():
@@ -68,7 +74,7 @@ def _get_connection():
 # ─── REVIEW SOURCES STATUS ──────────────────────────
 
 @review_bp.route("/sources")
-@_require_auth
+@login_required
 def sources():
     """Status page for all review sources."""
     conn = _get_connection()
@@ -97,7 +103,7 @@ def sources():
 # ─── SYNC ────────────────────────────────────────────
 
 @review_bp.route("/sync", methods=["GET", "POST"])
-@_require_auth
+@login_required
 def sync():
     """Manual trigger historical sync."""
     tenant_id = _get_tenant()
@@ -132,7 +138,7 @@ def sync():
 
 
 @review_bp.route("/sync/run", methods=["POST"])
-@_require_auth
+@login_required
 def sync_run():
     """API endpoint for sync."""
     tenant_id = _get_tenant()
@@ -153,7 +159,7 @@ def sync_run():
 # ─── SYNC HISTORY ────────────────────────────────────
 
 @review_bp.route("/sync/history")
-@_require_auth
+@login_required
 def sync_history():
     """List recent sync reports."""
     tenant_id = _get_tenant()
@@ -163,7 +169,7 @@ def sync_history():
 
 
 @review_bp.route("/sync/report/<report_id>")
-@_require_auth
+@login_required
 def sync_report_detail(report_id):
     """View sync report detail."""
     tenant_id = _get_tenant()
@@ -177,7 +183,7 @@ def sync_report_detail(report_id):
 # ─── IMPORT ──────────────────────────────────────────
 
 @review_bp.route("/import", methods=["GET", "POST"])
-@_require_auth
+@login_required
 def import_reviews():
     """CSV/XLSX Outscraper import page."""
     tenant_id = _get_tenant()
@@ -251,7 +257,7 @@ def import_reviews():
                 rows=parsed_rows,
                 outlet_map=outlet_map,
                 file_name=file.filename,
-                user_id=session.get("user_id", "system"),
+                user_id=str(current_user.id) if current_user.is_authenticated else "system",
             )
             os.unlink(tmp_path)
             flash(f"Import completed: {result.get('rows_valid', 0)} valid, "
@@ -265,7 +271,7 @@ def import_reviews():
 # ─── RECONCILIATION ──────────────────────────────────
 
 @review_bp.route("/reconcile", methods=["POST"])
-@_require_auth
+@login_required
 def reconcile():
     """Trigger reconciliation."""
     tenant_id = _get_tenant()
@@ -279,7 +285,7 @@ def reconcile():
 # ─── REVIEW LIST ─────────────────────────────────────
 
 @review_bp.route("/list")
-@_require_auth
+@login_required
 def review_list():
     """List reviews for this tenant."""
     tenant_id = _get_tenant()
@@ -309,7 +315,7 @@ def review_list():
 # ─── EVENT PROCESSING (Mock) ─────────────────────────
 
 @review_bp.route("/events/simulate", methods=["POST"])
-@_require_auth
+@login_required
 def simulate_event():
     """Simulate a NEW_REVIEW or UPDATED_REVIEW event for testing."""
     tenant_id = _get_tenant()
@@ -340,7 +346,7 @@ def simulate_event():
 # ─── PUB/SUB SETTINGS ────────────────────────────────
 
 @review_bp.route("/pubsub")
-@_require_auth
+@login_required
 def pubsub_settings():
     """Pub/Sub configuration page (mock)."""
     health = pubsub_health_check()
