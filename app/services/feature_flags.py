@@ -56,6 +56,22 @@ def is_reply_enabled_globally() -> bool:
     return os.environ.get('GRM_REPLY_ENABLED_GLOBAL', 'false').lower() == 'true'
 
 
+def is_grm_manage_enabled() -> bool:
+    """Master switch for the optional 'GRM Manage' subsystem (Google OAuth
+    connect/callback/account/location/reconciliation routes, and the
+    reply draft/approval/publish/moderation API).
+
+    OFF by default. Per GRM_PRODUCT_MASTER skill §3, OAuth / direct reply /
+    auto-reply must never activate without an explicit owner decision.
+    When this flag is false, the routes in app.routes.google and
+    app.routes.response are not registered at all — they do not exist on
+    the running app (404), regardless of whether GOOGLE_CLIENT_ID/SECRET
+    happen to be configured. Flip to true only after an explicit owner
+    decision to start using GRM Manage.
+    """
+    return os.environ.get('GRM_MANAGE_ENABLED', 'false').lower() == 'true'
+
+
 def publish_requires_approval() -> bool:
     """In pilot mode, all publishes require human approval."""
     return True
