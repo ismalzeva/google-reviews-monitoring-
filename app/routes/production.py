@@ -4,6 +4,7 @@ This endpoint is safe to call without credentials. It never returns
 secrets, tokens, or sensitive configuration values.
 """
 from flask import Blueprint, jsonify, current_app
+from flask_login import login_required, current_user
 from datetime import datetime, timezone
 import os
 import uuid
@@ -34,6 +35,7 @@ def _yes_no(val: bool) -> str:
 
 
 @bp.route('/readiness')
+@login_required
 def readiness():
     """Full production readiness diagnostic.
 
@@ -44,7 +46,17 @@ def readiness():
       4. Pilot mode — current limits and whitelist
       5. Security — auto-reply, reply enabled, approval, rollback
       6. Infrastructure — env file, database type, Caddy/domain
+
+    BUGFIX/HARDENING: this endpoint used to have no authentication at all
+    (no @login_required, no flask_login import) despite returning partial
+    secret material (first 4 chars of GOOGLE_CLIENT_ID/SECRET, GCP project,
+    Pub/Sub topic/subscription) and the server hostname to anyone who knew
+    the URL. Now requires login + owner/admin role, consistent with how
+    other sensitive diagnostics are gated in this app.
     """
+    if not current_user.has_role('owner', 'admin'):
+        return jsonify({'error': 'Insufficient permissions'}), 403
+
     cfg = current_app.config
 
     # ── 1. Google OAuth ──────────────────────────────────────
